@@ -2,28 +2,44 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import gurobipy as gp
 from gurobipy import GRB
+from dataclasses import dataclass
 
-def generate_nodes(n: int, p: float, k=1, seed=42) -> tuple:
-    graph = nx.fast_gnp_random_graph(n=n, p=p, seed=seed, directed=True)
-    return list(graph.nodes), list(graph.edges)
+env = gp.Env("gurobi.log")
 
-nodes, edges = generate_nodes(20, 0.1)
+@dataclass
+class KEP:
+    "Class for KEP problems"
+    nodes: list
+    edges: list
+    G: nx.DiGraph
+    cycles: list | None
 
-def simple_KEP(nodes, edges):
+    def __init__(self, n: int, p: float, k=1, seed=42):
+        self.G = nx.fast_gnp_random_graph(n=n, p=p, seed=seed, directed=True)
+        self.nodes = list(self.G.nodes)
+        self.edges = list(self.G.edges)
+        self.cycles = None
+    
+    def add_cycles(self, max_length):
+        if self.cycles is None:
+            self.cycles = [tuple(cycle) for cycle in nx.simple_cycles(self.G, max_length)]
+
+
+def simple_kep_solver(kep: KEP) -> list:
     try:
-        m = gp.Model("KEP")
-        m_edges = m.addVars(edges, vtype=GRB.BINARY, name="t")
-        m_nodes = m.addVars(nodes, vtype=GRB.BINARY, name="p")
+        m = gp.Model("KEP", env=env)
+        m_edges = m.addVars(kep.edges, vtype=GRB.BINARY, name="t")
+        m_nodes = m.addVars(kep.nodes, vtype=GRB.BINARY, name="p")
 
         m.setObjective(m_edges.sum(), GRB.MAXIMIZE)
 
         m.addConstrs(
             gp.quicksum(m_edges[i, o] for i, o in edges if i == node) == m_nodes[node]
-            for node in nodes)
+            for node in kep.nodes)
 
         m.addConstrs(
             gp.quicksum(m_edges[i, o] for i, o in edges if o == node) == m_nodes[node]
-            for node in nodes)
+            for node in kep.nodes)
 
         m.optimize()
 
@@ -42,23 +58,20 @@ def simple_KEP(nodes, edges):
     except AttributeError:
         print("Encountered an attribute error")
 
-def cycle_KEP(nodes, edges, max_cycle):
-    G = nx.DiGraph()
-    G.add_nodes_from(nodes)
-    G.add_edges_from(edges)
-    cycles = [tuple(cycle) for cycle in nx.simple_cycles(G, max_cycle)]
+def cycle_kep_solver(kep: KEP, max_length: int) -> list:
+    kep.add_cycles(max_length)
 
     try:
-        m = gp.Model("cycle KEP")
-        m_cycles = m.addVars(cycles, vtype=GRB.BINARY, name="c")
-        m_nodes = m.addVars(nodes, vtype=GRB.BINARY, name="p")
+        m = gp.Model("cycle KEP", env=env)
+        m_cycles = m.addVars(kep.cycles, vtype=GRB.BINARY, name="c")
+        m_nodes = m.addVars(kep.nodes, vtype=GRB.BINARY, name="p")
 
         m.setObjective(gp.quicksum(len(cycle) * m_cycles[cycle]
-                    for cycle in cycles), GRB.MAXIMIZE)
+                    for cycle in kep.cycles), GRB.MAXIMIZE)
 
         m.addConstrs(
-            gp.quicksum(m_cycles[cycle] for cycle in cycles if node in cycle) == m_nodes[node]
-            for node in nodes
+            gp.quicksum(m_cycles[cycle] for cycle in kep.cycles if node in cycle) == m_nodes[node]
+            for node in kep.nodes
         )
 
         m.optimize()
@@ -79,8 +92,9 @@ def cycle_KEP(nodes, edges, max_cycle):
         print("Encountered an attribute error")
 
 
-transplants = simple_KEP(nodes, edges)
+problem = KEP(20, 0.1)
 
+transplants = simple_kep_solver(problem)
 unused_edges = [edge for edge in edges if edge not in transplants]
 G = nx.DiGraph()
 G.add_nodes_from(nodes)
@@ -91,7 +105,8 @@ nx.draw_networkx_edges(G, pos, edgelist=unused_edges)
 nx.draw_networkx_edges(G, pos, edgelist=transplants, width=2, edge_color="red")
 plt.show()
 
-cycles = cycle_KEP(nodes, edges, 5)
+
+cycles = cycle_kep_solver(problem, 5)
 print(cycles)
 
 nx.draw_networkx_nodes(G, pos)
