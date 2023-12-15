@@ -3,7 +3,8 @@ import gurobipy as gp
 from gurobipy import GRB
 from dataclasses import dataclass
 import time
-import math
+import itertools
+import cProfile
 
 @dataclass
 class KPG:
@@ -13,10 +14,10 @@ class KPG:
     players: list # list of player indices, length n
     capacity: list # carrying capacity of each player, length n
     weights: np.ndarray # weights of the items, size (n, m)
-    payoffs: np.ndarray # payoffs of the items, size (n, m)
-    interaction_coefs: np.ndarray # interaction payoff of the items (n, m)
     weights_type: str # weights setup: sym or asym
+    payoffs: np.ndarray # payoffs of the items, size (n, m)
     payoffs_type: str # payoffs setup: sym or asym
+    interaction_coefs: np.ndarray # interaction payoff of the items (n, n, m) with 0 on diagonals
     interaction_type: str # interaction setup: sym, asym or negasym
 
     def __init__(self, weights: np.ndarray, payoffs: np.ndarray, interaction_coefs: np.ndarray, capacity=0.2):
@@ -25,6 +26,7 @@ class KPG:
         self.payoffs = payoffs
         self.interaction_coefs = interaction_coefs
         self.players = list(range(self.n))
+        self.pairs = list(itertools.permutations(self.players, 2))
         self.capacity = [self.weights[p, :].sum() * capacity for p in self.players]
 
         # Assign type with heuristic
@@ -40,10 +42,10 @@ class KPG:
         
         if (np.abs(self.interaction_coefs) != self.interaction_coefs).any():
             self.interaction_type = "negasym"
-        elif (self.interaction_coefs[0, :] == self.interaction_coefs[1, :]).all():
-            self.interaction_type = "asym"
-        else:
+        elif (self.interaction_coefs[:, :, 0] == self.interaction_coefs[:, :, 1]).all():
             self.interaction_type = "sym"
+        else:
+            self.interaction_type = "asym"
 
     def generate(n=2, m=25, capacity=0.2, weight_type="sym", payoff_type="sym", interaction_type="sym"):
         players = list(range(n))
@@ -51,8 +53,8 @@ class KPG:
             case "sym":
                 weight = np.random.randint(1, 101, m)
                 weights = np.zeros((n, m))
-                for player in players:
-                    weights[player, :] = weight
+                for p in players:
+                    weights[p, :] = weight
             case "asym":
                 weights = np.random.randint(1, 101, (n, m))
             case _:
@@ -62,8 +64,8 @@ class KPG:
             case "sym":
                 payoff = np.random.randint(1, 101, m)
                 payoffs = np.zeros((n, m))
-                for player in players:
-                    payoffs[player, :] = payoff
+                for p in players:
+                    payoffs[p, :] = payoff
             case "asym":
                 payoffs = np.random.randint(1, 101, (n, m))
             case _:
@@ -71,16 +73,21 @@ class KPG:
 
         match interaction_type:
             case "sym":
-                coefs = np.random.randint(1, 101, m)
-                interaction_coefs = np.zeros((n, m))
-                for player in players:
-                    interaction_coefs[player, :] = coefs
+                coefs = np.random.randint(1, 101, (n, n))
+                interaction_coefs = np.zeros((n, n, m))
+                for j in range(m):
+                    interaction_coefs[:, :, j] = coefs
             case "asym":
-                interaction_coefs = np.random.randint(1, 101, (n, m))
+                interaction_coefs = np.random.randint(1, 101, (n, n, m))
             case "negasym":
-                interaction_coefs = np.random.randint(-100, 101, (n, m))
+                interaction_coefs = np.random.randint(-100, 101, (n, n, m))
             case _:
                 raise ValueError("Interaction type not recognised!")
+        
+        # Interaction cleanup
+        for j in range(m):
+            for i in range(n):
+                interaction_coefs[i, i, j] = 0
         
         kpg = KPG(weights, payoffs, interaction_coefs, capacity)
 
@@ -98,21 +105,68 @@ class KPG:
         capacity = [int(i) for i in lines[1].split(" ")]
         weights = np.zeros((n, m))
         payoffs = np.zeros((n, m))
-        interaction_coefs = np.zeros((math.factorial(n),m))
+        interaction_coefs = np.zeros((n, n, m))
 
         for i, line in enumerate(lines[2:]):
-            line = [int(i) for i in line.split()]
-            payoffs[: ,i] = line[1:n+1]
-            weights[:, i] = line[n+1:2*n + 1]
-            interaction_coefs[:, i] = line[2*n + 1:]
+            line = [int(i) for i in line.split()][1:]
+            for p in range(n):
+                payoffs[p, i] = line[p * 2]
+                weights[p, i] = line[p * 2 + 1]
+            coef_list = line[2*n:]
+            index = 0
+            for p1 in range(n):
+                for p2 in range(n):
+                    if p1 == p2:
+                        continue
+                    interaction_coefs[p1, p2, i] = coef_list[index]
+                    index += 1
 
         kpg = KPG(weights, payoffs, interaction_coefs)
         kpg.capacity = capacity
         
         return kpg
 
+    def print_data(self):
+        print("Payoffs")
+        print(self.payoffs)
+        print("Weights")
+        print(self.weights)
+        print("Interaction coefficients")
+        print(self.interaction_coefs)
 
-def oracle_optimization(kpg: KPG, point_x: np.ndarray, p: int, verbose=False) -> tuple[np.ndarray, int]:
+
+def create_player_oracle(kpg, p) -> tuple[gp.Model, gp.MVar, gp.MVar]:
+    env = gp.Env()
+    env.setParam("OutputFlag", 0)
+    
+    m = gp.Model(f"LocalKPG[{p}]", env=env)
+    x = m.addMVar((kpg.n, kpg.m), vtype=GRB.BINARY, name="x")
+    z = m.addMVar((kpg.n, kpg.n, kpg.m), vtype=GRB.BINARY, name="z")
+    
+    m.setObjective(kpg.payoffs[p, :] @ x[p, :] + 
+                   gp.quicksum(kpg.interaction_coefs[p1, p2, :] @ z[p1, p2, :] 
+                               for p1, p2 in kpg.pairs if p1 == p), 
+                   GRB.MAXIMIZE)
+
+    for i in kpg.players:
+        # Capacity constraint
+        m.addConstr(kpg.weights[i, :] @ x[i, :] <= kpg.capacity[i])
+    
+    for p1, p2 in kpg.pairs:
+        for j in range(kpg.m):
+            if p1 > p2:
+                # z value symmetry
+                m.addConstr(z[p1, p2, j] == z[p2, p1, j])
+                continue
+            # z value constraints
+            m.addConstr(z[p1, p2, j] <= x[p1, j])
+            m.addConstr(z[p1, p2, j] <= x[p2, j])
+            m.addConstr(z[p1, p2, j] >= x[p1, j] + x[p2, j] - 1)
+    
+    return (m, x, z)
+
+
+def oracle_optimization(oracle: tuple, kpg: KPG, point_x: np.ndarray, p: int, verbose=False) -> tuple[np.ndarray, int]:
     """ Detect local suboptimal solutions
     Function checks if a solution is suboptimal for player p and returns a local improvement if possible.
 
@@ -127,29 +181,15 @@ def oracle_optimization(kpg: KPG, point_x: np.ndarray, p: int, verbose=False) ->
 
     Returns:
         tuple[np.ndarray, int]: new matrix x as well as new player objective.
-    """    
-    # Only for n=2!
-    # TODO: extend for higher n.
-    m = gp.Model("LocalKPG", env=env)
-    x = m.addMVar((kpg.n, kpg.m), vtype=GRB.BINARY, name="x")
+    """
+    m, x, _ = oracle
     for i in kpg.players:
         # Fix actions of other players
         if i != p:
             for j in range(kpg.m):
                 x[i, j].lb = point_x[i, j]
                 x[i, j].ub = point_x[i, j]
-    z = m.addMVar(kpg.m, vtype=GRB.BINARY, name="z")
-    
-    m.setObjective(kpg.payoffs[p, :] @ x[p, :] + kpg.interaction_coefs[p, :] @ z, GRB.MAXIMIZE)
 
-    for i in kpg.players:
-        m.addConstr(kpg.weights[i, :] @ x[i, :] <= kpg.capacity[i])
-        for j in range(kpg.m):
-            m.addConstr(z[j] <= x[i, j])
-
-    for j in range(kpg.m):
-        m.addConstr(z[j] >= (x[:, j]).sum() - 1)
-    
     m.optimize()
 
     if verbose:
@@ -164,7 +204,7 @@ def oracle_optimization(kpg: KPG, point_x: np.ndarray, p: int, verbose=False) ->
     return x.X, m.ObjVal
 
 
-def zero_regrets(kpg: KPG, verbose=False) -> tuple[np.ndarray, int]:
+def zero_regrets(kpg: KPG, verbose=False) -> tuple[np.ndarray, int, float]:
     """Optimises kpg using the ZeroRegrets methods of cutting.
 
     Args:
@@ -180,59 +220,84 @@ def zero_regrets(kpg: KPG, verbose=False) -> tuple[np.ndarray, int]:
     # Only for n=2!
     # TODO: extend for higher n.
     start = time.time()
+
+    oracles = {p: create_player_oracle(kpg, p) for p in kpg.players}
+    
+    env = gp.Env()
+    env.setParam("OutputFlag", 0)
     pm = gp.Model("ZeroRegrets", env=env)
     x = pm.addMVar((kpg.n, kpg.m), vtype=GRB.BINARY, name="x")
-    z = pm.addMVar(kpg.m, vtype=GRB.BINARY, name="z")
+    z = pm.addMVar((kpg.n, kpg.n, kpg.m), vtype=GRB.BINARY, name="z")
 
-    pm.setObjective(gp.quicksum(kpg.payoffs[i, j] * x[i, j] + kpg.interaction_coefs[i, j] * z[j] 
-                                for j in range(kpg.m) for i in kpg.players), GRB.MAXIMIZE)
+    pm.setObjective(gp.quicksum(x[p, :] @ kpg.payoffs[p, :] for p in kpg.players) +
+                    gp.quicksum(kpg.interaction_coefs[p1, p2, :] @ z[p1, p2, :] 
+                               for p1, p2 in kpg.pairs), 
+                    GRB.MAXIMIZE)
 
     for i in kpg.players:
-        # Capacity limitations of players
-        pm.addConstr(gp.quicksum(kpg.weights[i, j] * x[i, j] for j in range(kpg.m)) <= kpg.capacity[i])
+        # Capacity constraint
+        pm.addConstr(kpg.weights[i, :] @ x[i, :] <= kpg.capacity[i])
+    
+    for p1, p2 in kpg.pairs:
         for j in range(kpg.m):
-            # Setup for indicator variable z
-            pm.addConstr(z[j] <= x[i, j])
-    
-    for j in range(kpg.m):
-        # Setup for indicator variable z
-        pm.addConstr(z[j] >= x[0, j] + x[1, j] - 1)  
-    
+            if p1 > p2:
+                pm.addConstr(z[p1, p2, j] == z[p2, p1, j])
+                continue
+            pm.addConstr(z[p1, p2, j] <= x[p1, j])
+            pm.addConstr(z[p1, p2, j] <= x[p2, j])
+            pm.addConstr(z[p1, p2, j] >= x[p1, j] + x[p2, j] - 1)
 
-    added_constraints = 0
+    dominance = 0
+    for p1, p2 in kpg.pairs:
+        for j in range(kpg.m):
+            j_min = min(kpg.payoffs[p1, j], kpg.payoffs[p1, j] + kpg.interaction_coefs[p1, p2, j])
+            for k in range(kpg.m):
+                if k == j or kpg.weights[p1, j] > kpg.weights[p1, k]:
+                    continue
+                if j_min > kpg.payoffs[p1, k]:
+                    pm.addConstr(x[p1, k] <= x[p1, j] + (1-x[p2, j]) + x[p2, k])
+                    dominance += 1
+    if verbose:
+        print("====")
+    cuts = 0
     while True:
         pm.optimize()
         
         if pm.Status == GRB.INFEASIBLE:
-            raise ValueError("IPG is not feasible!")
-        
+            print("IPG is not feasible (anymore)!")
+            break
+                    
         current_x = x.X
         current_z = z.X
         finished = True
-        print("====")
+
         print(f"Current total is {pm.ObjVal}")
-        for player in kpg.players:
-            obj = kpg.payoffs[player, :] @ current_x[player, :] + kpg.interaction_coefs[player, :] @ current_z
+        for p in kpg.players:
+            obj = kpg.payoffs[p, :] @ current_x[p, :] + \
+                sum(kpg.interaction_coefs[p1, p2, :] @ current_z[p1, p2, :] 
+                    for p1, p2 in kpg.pairs if p1 == p)
             
-            new_x, new_obj = oracle_optimization(kpg, current_x, player)
-            print(obj, new_obj)
+            new_x, new_obj = oracle_optimization(oracles[p], kpg, current_x, p)
+            if verbose:
+                print(obj, new_obj)
             if new_obj > obj:
                 # Add constraint!
-                if player == 0:
-                    opponent = 1
-                else:
-                    opponent = 0
-                pm.addConstr(kpg.payoffs[player, :] @ new_x[player, :] + 
-                             gp.quicksum(kpg.interaction_coefs[player, j] * new_x[player, j] * x[opponent, j] for j in range(kpg.m)) <= 
-                             gp.quicksum(kpg.payoffs[player, j] * x[player, j] for j in range(kpg.m)) + 
-                             gp.quicksum(kpg.interaction_coefs[player, j] * z[j] for j in range(kpg.m)))  
-                print("Added constraint")
-                added_constraints += 1
+                pm.addConstr(kpg.payoffs[p, :] @ new_x[p, :] + 
+                             gp.quicksum(kpg.interaction_coefs[p1, p2, j] * new_x[p1, j] * x[p2, j] 
+                                         for j in range(kpg.m) for p1, p2 in kpg.pairs if p1 == p) <= 
+                             gp.quicksum(kpg.payoffs[p, j] * x[p, j] for j in range(kpg.m)) + 
+                             gp.quicksum(kpg.interaction_coefs[p1, p2, j] * z[p1, p2, j] 
+                                         for j in range(kpg.m) for p1, p2 in kpg.pairs if p1 == p))  
+                cuts += 1
                 finished = False
-        print("====")
-        if finished:
-            print(f"Added {added_constraints} constraints!")
+        
+        if finished and verbose:
+            print("====")
+            print(f"Added {dominance} dominance constraints.")
+            print(f"Added {cuts} cuts.")
             print(x.X)
+            break
+        elif finished:
             break
 
     if verbose:
@@ -246,15 +311,12 @@ def zero_regrets(kpg: KPG, verbose=False) -> tuple[np.ndarray, int]:
 
 if __name__ == "__main__":
     np.random.seed(42)
-    env = gp.Env("gurobi.log")
-    env.setParam("OutputFlag", 0)
     prefix = "instances_kp/generated/"
     
     for capacity in [2, 5, 8]:
-        file = prefix + f"2-25-{capacity}-pot.txt"
+        file = prefix + f"2-25-{capacity}-cij.txt"
         print(file)
         instance = KPG.read_file(file)
-        print(instance)
         x, obj, runtime = zero_regrets(instance)
         print(f"{obj} in {runtime} seconds")
     
