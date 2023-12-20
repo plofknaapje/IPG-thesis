@@ -11,15 +11,13 @@ results = {}
 
 # Run the problem while ignoring one item each time.
 for i in range(master_kpg.m):
-    # Only consider items which were used in the master solution.
     if sum(master_result.X[:, i]) > 0:
         payoffs = master_kpg.payoffs.copy()
         payoffs[:, i] = 0
         interaction_coefs = master_kpg.interaction_coefs.copy()
         interaction_coefs[:, :, i] = 0
         weights = master_kpg.weights
-        # New problem where the item i is ignored (payoff and interaction = 0)
-        instance = kpg.KPG(weights, payoffs, interaction_coefs, capacity = master_kpg.capacity)
+        instance = kpg.KPG(weights, payoffs, interaction_coefs)
         instance.capacity = master_kpg.capacity
         results[i] = (kpg.zero_regrets(instance))
         print(results[i].ObjVal)
