@@ -19,9 +19,9 @@ scores = []
 
 for i in range(games):
     instance = kpg.KPG(weights[i], payoffs, interaction_coefs)
-    x, obj, time = kpg.zero_regrets(instance)
-    player_results += np.divide(x, weights[i]) 
-    scores.append(obj)
+    result = kpg.zero_regrets(instance)
+    player_results += np.divide(result.X, weights[i])
+    scores.append(result.ObjVal)
 
 print(player_results)
 print(scores)

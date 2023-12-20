@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 env = gp.Env("gurobi.log")
 
+
 @dataclass
 class KEP:
     "Class for KEP problems"
@@ -19,10 +20,11 @@ class KEP:
         self.nodes = list(self.G.nodes)
         self.edges = list(self.G.edges)
         self.cycles = None
-    
+
     def add_cycles(self, max_length):
         if self.cycles is None:
-            self.cycles = [tuple(cycle) for cycle in nx.simple_cycles(self.G, max_length)]
+            self.cycles = [tuple(cycle)
+                           for cycle in nx.simple_cycles(self.G, max_length)]
 
 
 def simple_kep_solver(kep: KEP) -> list:
@@ -34,11 +36,13 @@ def simple_kep_solver(kep: KEP) -> list:
         m.setObjective(m_edges.sum(), GRB.MAXIMIZE)
 
         m.addConstrs(
-            gp.quicksum(m_edges[i, o] for i, o in edges if i == node) == m_nodes[node]
+            gp.quicksum(m_edges[i, o]
+                        for i, o in edges if i == node) == m_nodes[node]
             for node in kep.nodes)
 
         m.addConstrs(
-            gp.quicksum(m_edges[i, o] for i, o in edges if o == node) == m_nodes[node]
+            gp.quicksum(m_edges[i, o]
+                        for i, o in edges if o == node) == m_nodes[node]
             for node in kep.nodes)
 
         m.optimize()
@@ -58,6 +62,7 @@ def simple_kep_solver(kep: KEP) -> list:
     except AttributeError:
         print("Encountered an attribute error")
 
+
 def cycle_kep_solver(kep: KEP, max_length: int) -> list:
     kep.add_cycles(max_length)
 
@@ -67,10 +72,11 @@ def cycle_kep_solver(kep: KEP, max_length: int) -> list:
         m_nodes = m.addVars(kep.nodes, vtype=GRB.BINARY, name="p")
 
         m.setObjective(gp.quicksum(len(cycle) * m_cycles[cycle]
-                    for cycle in kep.cycles), GRB.MAXIMIZE)
+                                   for cycle in kep.cycles), GRB.MAXIMIZE)
 
         m.addConstrs(
-            gp.quicksum(m_cycles[cycle] for cycle in kep.cycles if node in cycle) == m_nodes[node]
+            gp.quicksum(m_cycles[cycle]
+                        for cycle in kep.cycles if node in cycle) == m_nodes[node]
             for node in kep.nodes
         )
 
