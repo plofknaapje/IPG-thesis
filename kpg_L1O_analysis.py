@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 
-prefix = "pickles"
+prefix = "pickles/"
 file = prefix + "2-25-5-cij"
 
 with open(file + ".pickle", "rb") as f:
@@ -24,10 +24,14 @@ for key, value in results.items():
             continue
         interactions[i, :] = np.multiply(value.X[p1, :], value.X[p2, :])
         i += 1
-    lines.append(np.concatenate(np.flatten(value.X), np.flatten(interactions)))
+    lines.append(np.concatenate((value.X.flatten(), interactions.flatten())))
     opt_vals.append(value.ObjVal)
 
-df = pd.DataFrame(lines)
-df["value"] = opt_vals
+X = pd.DataFrame(lines)
+y = pd.DataFrame(opt_vals)
 
-print(df)
+lr = LinearRegression(fit_intercept=False)
+lr.fit(X, y)
+coefs = np.reshape(lr.coef_, (-1, m))
+print(coefs)
+print(results["master"].kpg)

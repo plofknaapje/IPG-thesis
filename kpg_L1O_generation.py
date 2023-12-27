@@ -6,7 +6,7 @@ import os
 # method.
 
 prefix = "instances_kp/generated/"
-files = ["3-25-2-cij", "3-25-5-cij", "3-25-8-cij"]
+files = ["2-25-2-cij", "2-25-5-cij", "2-25-8-cij", "3-25-2-cij", "3-25-5-cij", "3-25-8-cij"]
 
 for file in files:
     if os.path.isfile(f"pickles/{file}.pickle"):
@@ -14,7 +14,7 @@ for file in files:
     path = prefix + file + ".txt"
     master_kpg = kpg.read_file(path)
     master_result = kpg.zero_regrets(master_kpg)
-    results = {}
+    results = {"master": master_result}
 
     # Run the problem while ignoring one item each time.
     for i in range(master_kpg.m):
@@ -27,7 +27,7 @@ for file in files:
             instance = kpg.KPG(weights, payoffs, interaction_coefs, capacity=master_kpg.capacity)
             results[i] = (kpg.zero_regrets(instance))
             print(results[i].ObjVal)
-    
+
     with open(f"pickles/{file}.pickle", "wb") as f:
         pickle.dump(results, f, pickle.HIGHEST_PROTOCOL)
 
