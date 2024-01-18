@@ -247,7 +247,7 @@ def zero_regrets(kpg: KPG, verbose=False) -> KPGResult:
     x = pm.addMVar((kpg.n, kpg.m), vtype=GRB.BINARY, name="x")
     z = pm.addMVar((kpg.n, kpg.n, kpg.m), vtype=GRB.BINARY, name="z")
 
-    pm.setObjective(gp.quicksum(x[p, :] @ kpg.payoffs[p, :] for p in kpg.players) + # type: ignore
+    pm.setObjective(gp.quicksum(x[p, :] @ kpg.payoffs[p, :] for p in kpg.players) +
                     gp.quicksum(kpg.interaction_coefs[p1, p2, :] @ z[p1, p2, :]
                                 for p1, p2 in kpg.pairs),
                     GRB.MAXIMIZE)
