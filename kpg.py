@@ -9,7 +9,7 @@ import utils
 
 @dataclass
 class KPG:
-    # Class for storing all data of a binary Knapsack Packing Game.
+    # Class for storing binary Knapsack Packing Games.
     n: int  # number of players
     m: int  # number of items
     players: list  # list of player indices, length n
