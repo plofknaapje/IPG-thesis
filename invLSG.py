@@ -11,20 +11,24 @@ def inverse_LSG(obss: list[lsg.LSG], sols: list[np.ndarray]) -> list:
     locations = obss[0].locations
     observations = list(range(len(obss)))
 
-    solutions = {(o, i): [] for i in incumbents for o in range(len(obss))}
+    sub_sols = {(o, i): [] for i in incumbents for o in range(len(obss))}
 
     while True:
 
+        # IP model
         model = gp.Model("MasterProblem")
 
+        # Parameters of interest
         alpha = model.addVar(lb=0, ub=1, name="alpha")
         betas = model.addVars(len(incumbents), lb=0, ub=1, name="beta")
-        # x = model.addVars((len(observations), len(incumbents), len(locations)), vtype=GRB.BINARY, name="x")
+        # Meta variable
         delta = model.addVars(len(obss), len(incumbents), name="delta")
-        true_f = model.addVars(len(obss), len(incumbents), len(customers), 
+
+        # Support variables
+        true_f = model.addVars(len(obss), len(incumbents), len(customers),
                                lb=0, ub=1, name="f_true")
-        new_f = model.addVars(len(obss), len(incumbents), len(customers), 
-                              max(len(item) for _, item in solutions.items()),
+        new_f = model.addVars(len(obss), len(incumbents), len(customers),
+                              max(len(item) for _, item in sub_sols.items()),
                               lb=0, ub=1, name="f_new")
         M = model.addVars(len(obss), len(incumbents), len(customers), name="M")
         util = model.addVars(len(obss), len(incumbents), len(customers), len(locations), name="util")
@@ -37,54 +41,53 @@ def inverse_LSG(obss: list[lsg.LSG], sols: list[np.ndarray]) -> list:
         )
 
         model.addConstrs(
-            util[o, i, j, k] == betas[i] + alpha * obss[o].norm_distance[j, k] + 
+            util[o, i, j, k] == betas[i] + alpha * obss[o].norm_distance[j, k] +
                                          (1 - alpha) * obss[o].conveniences[k]
             for o in observations for i in incumbents for j in customers for k in locations
         )
-        
+
         for o, obs in enumerate(obss):
-            viable = {j: [k for k in obs.locations if obs.distance[j, k] < obs.max_dist]
-                      for j in obs.customers}
+            viable = obs.viable
             for i in incumbents:
                 true_sol = sols[o]
                 model.addConstrs(
-                    true_f[o, i, j] * 
-                    gp.quicksum(gp.quicksum(true_sol[ii, k] * util[o, ii, j, k] 
+                    true_f[o, i, j] *
+                    gp.quicksum(gp.quicksum(true_sol[ii, k] * util[o, ii, j, k]
                                             for ii in incumbents if ii != i) +
                                 true_sol[i, k] * util[o, i, j, k]
-                                for k in viable[j]) <=
+                                for k in viable[j]) ==
                     gp.quicksum(true_sol[i, k] * util[o, i, j, k] for k in viable[j])
                     for j in customers
                 )
-                model.addConstrs(
-                    true_f[o, i, j] * M[o, i, j] <= 
-                    gp.quicksum(true_sol[i, k] * util[o, i, j, k] for k in viable[j])
-                    for o in observations for i in incumbents for j in customers
-                )
+                # model.addConstrs(
+                #     true_f[o, i, j] * M[o, i, j] <=
+                #     gp.quicksum(true_sol[i, k] * util[o, i, j, k] for k in viable[j])
+                #     for o in observations for i in incumbents for j in customers
+                # )
 
 
-                true_profit = gp.quicksum(obs.margin[i,j] * obs.pop_count[j] * true_f[o, i, j] 
+                true_profit = gp.quicksum(obs.margin[i,j] * obs.pop_count[j] * true_f[o, i, j]
                                           for j in customers) - \
                     gp.quicksum(obs.costs[i,k] * true_sol[i,k] for k in locations)
 
-                for s, new_sol in enumerate(solutions[o, i]):
+                for s, new_sol in enumerate(sub_sols[o, i]):
                     model.addConstrs(
-                        new_f[o, i, j, s] * 
-                        gp.quicksum(gp.quicksum(true_sol[ii, k] * util[o, ii, j, k] 
+                        new_f[o, i, j, s] *
+                        gp.quicksum(gp.quicksum(true_sol[ii, k] * util[o, ii, j, k]
                                                 for ii in incumbents if ii != i) +
                                     new_sol[k] * util[o, i, j, k]
-                                    for k in viable[j]) <=
-                        gp.quicksum(new_sol[k] * util[o, i, j, k] for k in viable[j]) 
-                        for j in customers 
+                                    for k in viable[j]) ==
+                        gp.quicksum(new_sol[k] * util[o, i, j, k] for k in viable[j])
+                        for j in customers
                     )
 
-                    model.addConstrs(
-                        new_f[o, i, j, s] * M[o, i, j] <= 
-                        gp.quicksum(new_sol[k] * util[o, i, j, k] for k in viable[j]) 
-                        for o in observations for i in incumbents for j in customers
-                    )
+                    # model.addConstrs(
+                    #     new_f[o, i, j, s] * M[o, i, j] <=
+                    #     gp.quicksum(new_sol[k] * util[o, i, j, k] for k in viable[j])
+                    #     for o in observations for i in incumbents for j in customers
+                    # )
 
-                    new_profit = gp.quicksum(obs.margin[i,j] * obs.pop_count[j] * new_f[o, i, j, s] 
+                    new_profit = gp.quicksum(obs.margin[i,j] * obs.pop_count[j] * new_f[o, i, j, s]
                                              for j in customers) - \
                         gp.quicksum(obs.costs[i,k] * new_sol[k] for k in locations)
                     model.addConstr(delta[o,i] >= new_profit - true_profit)
@@ -100,11 +103,11 @@ def inverse_LSG(obss: list[lsg.LSG], sols: list[np.ndarray]) -> list:
         for o, obs in enumerate(obss):
             temp_obs = copy.copy(obs)
             temp_obs.update_alpha_beta(new_alpha, new_betas)
-            new_x =  lsg.solve_LSG(temp_obs)
+
             for i in incumbents:
-                if not lsg.duplicate_array(solutions[o, i], new_x[i, :]):
-                    solutions[o, i].append(new_x[i, :])
-                    print(new_x[i, :])
+                new_x =  lsg.solve_partial_LSG(temp_obs, sols[o], i)
+                if not lsg.duplicate_array(sub_sols[o, i], new_x):
+                    sub_sols[o, i].append(new_x)
                     new_solution = True
 
         if not new_solution:
@@ -113,9 +116,10 @@ def inverse_LSG(obss: list[lsg.LSG], sols: list[np.ndarray]) -> list:
     return [new_alpha, new_betas]
 
 alpha = 0.4
-betas = [0.4, 0.6]
-obss = [lsg.random_LSG(2, 10, 10, alpha=alpha, betas=betas, seed=i) for i in range(4)]
+betas = [0.6, 0.8]
+obss = [lsg.random_LSG(2, 10, 10, alpha=alpha, betas=betas, seed=i) for i in range(5)]
 
 solutions = [lsg.solve_LSG(obs) for obs in obss]
+print(solutions)
 
 print(inverse_LSG(obss, solutions))

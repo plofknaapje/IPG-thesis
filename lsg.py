@@ -13,7 +13,7 @@ class LSG:
     customers: list # J
     locations: list # K
     potential_locs: dict # K_i \subset K for i \in I
-    # retail_strats: dict # i \in I
+    rivals: list # I
 
     # Exogenous parameters
     pop_count: list # (j)
@@ -22,8 +22,8 @@ class LSG:
     max_dist: int
     distance: np.ndarray # (j, k)
     norm_distance: np.ndarray # (j, k)
+    viable: list # j
     conveniences: list # (k)
-    max_convenience: int
     # observed_locs: list # (i)
 
     # Endogenous variables
@@ -35,14 +35,16 @@ class LSG:
     def update_alpha_beta(self, alpha: float, betas: list):
         self.alpha = alpha
         self.betas = betas
-        self.utility = np.array([[[betas[i] + alpha * self.distance[j, k] + (1 - alpha) * self.conveniences[k] 
-                                   for k in self.locations] 
-                                   for j in self.customers] 
+        self.utility = np.array([[[betas[i] + alpha * self.distance[j, k] + (1 - alpha) * self.conveniences[k]
+                                   for k in self.locations]
+                                   for j in self.customers]
                                    for i in self.incumbents])
 
 
 def random_LSG(incumbents: int, customers: int, locations: int, alpha: float=0.4,
                betas=None, beta_range: int = 1, seed: int = 42) -> LSG:
+    # Generate a random LSG instance
+
     random.seed(seed)
     np.random.seed(seed)
 
@@ -50,17 +52,18 @@ def random_LSG(incumbents: int, customers: int, locations: int, alpha: float=0.4
     i = list(range(incumbents))
     j = list(range(customers))
     k = list(range(locations))
+    rivals = [[iii for iii in i if iii != ii] for ii in i]
+    max_dist = 100
 
     # Potential location assignment
     potential = {ii: [] for ii in i}
     for kk in k:
         potential[random.choice(i)].append(kk)
 
+    # Attributes of locations and customers
     population = [random.randint(45, 55) for _ in j]
-    margin = np.ones((len(i), len(j))) 
+    margin = np.ones((len(i), len(j)))
     costs = np.random.randint(45, 56, (len(i), len(k)))
-    max_dist = 100
-
     pop_coords = [(random.randint(1, 100), random.randint(1, 100)) for _ in j]
     store_coords = [(random.randint(1, 100), random.randint(1, 100)) for _ in k]
 
@@ -72,7 +75,10 @@ def random_LSG(incumbents: int, customers: int, locations: int, alpha: float=0.4
             # Manhattan distance
             distance[jj, kk] = abs(pop[0] - store[0]) + abs(pop[1] - store[1])
             norm_distance[jj, kk] = (max_dist - distance[jj, kk]) / max_dist
+    viable = [[kk for kk in k if distance[jj, kk] < max_dist]
+              for jj in j]
 
+    # Convenience of locations
     competition_coords = [(random.randint(1, 100), random.randint(1, 100)) for _ in range(50)]
     conveniences = []
     for kk, store in enumerate(store_coords):
@@ -81,39 +87,44 @@ def random_LSG(incumbents: int, customers: int, locations: int, alpha: float=0.4
             comp_dists.append(abs(store[0] - comp[0]) + abs(store[1] - comp[1]))
         conveniences.append(mean(comp_dists))
 
+    # Normalise convenience
     max_convenience = max(conveniences)
-
     for cc, conv in enumerate(conveniences):
         conveniences[cc] = (max_convenience - conv) / max_convenience
 
-    # alpha = 0.4
     if betas is None:
         betas = [random.random() for _ in i]
         betas = [beta/sum(betas)*beta_range for beta in betas]
 
-    utility = np.array([[[betas[ii] + alpha * distance[jj, kk] + (1 - alpha) * conveniences[kk] for kk in k]
+    utility = np.array([[[betas[ii] + alpha * norm_distance[jj, kk] + (1 - alpha) * conveniences[kk] for kk in k]
                 for jj in j] for ii in i])
 
-    return LSG(i, j, k, potential, population, margin, costs, max_dist, distance,
-               norm_distance, conveniences, max_convenience, utility, alpha, betas)
+    return LSG(i, j, k, potential, rivals, population, margin, costs, max_dist, distance,
+               norm_distance, viable, conveniences, utility, alpha, betas)
 
 
 def solve_LSG(problem: LSG, verbose=False) -> np.ndarray:
+    # Solve LSG instance by switching between players untill a strategy is repeated.abs
+
     x = np.zeros((len(problem.incumbents), len(problem.locations)))
     solutions = []
+
     while not duplicate_array(solutions, x):
         for player in problem.incumbents:
             solutions.append(x.copy())
-            x = solve_partial_LSG(problem, x, player, verbose)
+            x[player,:] = solve_partial_LSG(problem, x, player, verbose)
     return x
 
 def solve_partial_LSG(problem: LSG, x_hat: np.ndarray, i: int, verbose=False) -> np.ndarray:
-    rivals = [ii for ii in problem.incumbents if i != ii]
+    # Solve LSG for one player given the actions of other players
+
+    rivals = problem.rivals[i]
+    viable = problem.viable
     bound_m = [min(problem.utility[i, j, k] for k in problem.locations) / 1
                for j in problem.customers]
-    viable = {j: [k for k in problem.locations if problem.distance[j, k] < problem.max_dist]
-              for j in problem.customers}
 
+    # IP model
+    # Variables
     model = gp.Model("PartialLSG")
     x = model.addMVar(len(problem.locations), vtype=GRB.BINARY, name="x")
     for location in problem.locations:
@@ -122,29 +133,31 @@ def solve_partial_LSG(problem: LSG, x_hat: np.ndarray, i: int, verbose=False) ->
     y = model.addMVar((len(problem.locations), len(problem.locations)), lb=0, ub=1, name="y")
     f = model.addMVar(len(problem.customers), lb=0, ub=1, name="f")
 
+    # Objective
     model.setObjective(gp.quicksum(problem.margin[i,j] * problem.pop_count[j] * f[j]
                                    for j in problem.customers) -
                        gp.quicksum(problem.costs[i,k] * x[k]
                                    for k in problem.locations),
                        GRB.MAXIMIZE)
 
+    x_u = [gp.quicksum(x[k] * problem.utility[i, j, k] for k in viable[j])
+           for j in problem.customers]
+    y_u = [gp.quicksum(y[j,k] * problem.utility[i, j, k] for k in viable[j])
+           for j in problem.customers]
+    x_hat_u = [gp.quicksum(f[j] * x_hat[ii, k] * problem.utility[ii, j, k]
+                          for ii in rivals for k in viable[j])
+               for j in problem.customers]
+    # Constraints
     # y[j,k] = f[j] * x[k]
     for j in problem.customers:
         for k in problem.locations:
             model.addConstr(y[j,k] <= x[k])
             model.addConstr(y[j,k] <= f[j])
-            model.addConstr(y[j,k] >= f[k] - (1 - x[k]))
+            model.addConstr(y[j,k] >= f[j] - (1 - x[k]))
 
-    for j in problem.customers:
-        model.addConstr(f[j] <= bound_m[j] * gp.quicksum(
-            x[k] * problem.utility[i, j, k]
-            for k in viable[j]
-        ))
+        model.addConstr(f[j] <= bound_m[j] * x_u[j])
 
-        model.addConstr(gp.quicksum(y[j,k] * problem.utility[i, j, k] for k in viable[j]) +
-                        gp.quicksum(f[j] * x_hat[ii, k] * problem.utility[ii, j, k]
-                                    for ii in rivals for k in viable[j]) <=
-                        gp.quicksum(x[k] * problem.utility[i, j, k] for k in viable[j]))
+        model.addConstr(y_u[j] + x_hat_u[j] <= x_u[j])
 
     model.optimize()
 
@@ -155,8 +168,7 @@ def solve_partial_LSG(problem: LSG, x_hat: np.ndarray, i: int, verbose=False) ->
         print(y.X)
         print(f.X)
 
-    x_hat[i, :] = x.X
-    return x_hat
+    return x.X
 
 def duplicate_array(solutions: list, x: np.ndarray) -> bool:
     for solution in solutions:
