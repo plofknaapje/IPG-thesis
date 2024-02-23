@@ -4,6 +4,8 @@ from statistics import mean
 import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
+from utils import duplicate_array
+
 @dataclass
 class LSG:
     # Class for storing Location Selection Games
@@ -42,11 +44,8 @@ class LSG:
 
 
 def random_LSG(incumbents: int, customers: int, locations: int, alpha: float=0.4,
-               betas=None, beta_range: int = 1, seed: int = 42) -> LSG:
+               betas=None, beta_range: int = 1) -> LSG:
     # Generate a random LSG instance
-
-    random.seed(seed)
-    np.random.seed(seed)
 
     # Base parameters
     i = list(range(incumbents))
@@ -72,8 +71,8 @@ def random_LSG(incumbents: int, customers: int, locations: int, alpha: float=0.4
     norm_distance = np.zeros((len(j), len(k)))
     for jj, pop in enumerate(pop_coords):
         for kk, store in enumerate(store_coords):
-            # Manhattan distance
-            distance[jj, kk] = abs(pop[0] - store[0]) + abs(pop[1] - store[1])
+            # Euclidian distance
+            distance[jj, kk] = ((pop[0] - store[0])**2 + (pop[1] - store[1])**2)**0.5
             norm_distance[jj, kk] = (max_dist - distance[jj, kk]) / max_dist
     viable = [[kk for kk in k if distance[jj, kk] < max_dist]
               for jj in j]
@@ -122,6 +121,7 @@ def solve_partial_LSG(problem: LSG, x_hat: np.ndarray, i: int, verbose=False) ->
     viable = problem.viable
     bound_m = [min(problem.utility[i, j, k] for k in problem.locations) / 1
                for j in problem.customers]
+    
 
     # IP model
     # Variables
@@ -170,17 +170,11 @@ def solve_partial_LSG(problem: LSG, x_hat: np.ndarray, i: int, verbose=False) ->
 
     return x.X
 
-def duplicate_array(solutions: list, x: np.ndarray) -> bool:
-    for solution in solutions:
-        if np.array_equal(solution, x):
-            return True
-    return False
-
 
 if __name__ == "__main__":
-
+    random.seed(42)
     example = random_LSG(2, 10, 10)
 
     for i in range(1):
-        sample = random_LSG(2, 10, 10, seed=i)
+        sample = random_LSG(2, 10, 10)
         solve_LSG(sample)

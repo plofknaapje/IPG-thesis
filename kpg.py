@@ -56,6 +56,10 @@ class KPG:
             self.interaction_type = "sym"
         else:
             self.interaction_type = "asym"
+        
+        for p in self.players:
+            if np.sum(np.abs(interaction_coefs[p, p])) != 0:
+                raise ValueError("Invalid Interaction")
 
     def print_data(self):
         print("Payoffs")
@@ -113,6 +117,9 @@ def generateKPG(n=2, m=25, capacity=0.2, weight_type="sym", payoff_type="sym", i
             interaction_coefs = np.random.randint(-100, 101, (n, n, m))
         case _:
             raise ValueError("Interaction type not recognised!")
+
+    for p in players:
+        interaction_coefs[p, p, :] = 0
 
     # Interaction cleanup
     for j in range(m):
