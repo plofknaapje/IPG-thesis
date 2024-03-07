@@ -80,7 +80,7 @@ class KPGResult:
     kpg: KPG
 
 
-def generateKPG(n=2, m=25, capacity=0.2, weight_type="sym", payoff_type="sym", interaction_type="sym") -> KPG:
+def generate_random_KPG(n=2, m=25, capacity=0.2, weight_type="sym", payoff_type="sym", interaction_type="sym") -> KPG:
     players = list(range(n))
 
     match weight_type:

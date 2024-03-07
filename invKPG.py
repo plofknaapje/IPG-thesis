@@ -8,48 +8,60 @@ from utils import duplicate_array
 def generate_problems(size: int, n: int, m: int, capacity: float, weight_type: str="sym", 
                       payoff_type: str="sym", interaction_type: str="sym") -> list[kpg.KPG]:
     # Generate KPG instances with the same payoff and interactions.
-    # Payoffs and interactions are normalised
+    # Payoffs are in range 1, m
+    # Interactions are picked from same range
     problems = []
     players = list(range(n))
 
+    payoffs = np.zeros((n, m))
     match payoff_type:
         case "sym":
-            payoff = np.random.randint(1, 101, m)
-            payoffs = np.zeros((n, m))
+            payoff = np.arange(m) + 1
+            np.random.shuffle(payoff)
             for p in players:
                 payoffs[p, :] = payoff
         case "asym":
-            payoffs = np.random.randint(1, 101, (n, m))
+            for p in players:
+                payoff = np.arange(m) + 1
+                np.random.shuffle(payoff)
+                payoffs[p, :] = payoff
         case _:
             raise ValueError("Payoff type not recognised!")
     # payoffs = payoffs / payoffs.sum()
 
     match interaction_type:
+        case "none":
+            interaction_coefs = np.zeros((n, n, m))
         case "sym":
-            coefs = np.random.randint(1, 101, (n, n))
+            coefs = np.random.randint(1, m + 1, (n, n))
             interaction_coefs = np.zeros((n, n, m))
             for j in range(m):
                 interaction_coefs[:, :, j] = coefs
         case "asym":
-            interaction_coefs = np.random.randint(1, 101, (n, n, m))
+            interaction_coefs = np.random.randint(1, m+1, (n, n, m))
         case "negasym":
-            interaction_coefs = np.random.randint(-100, 101, (n, n, m))
+            interaction_coefs = np.random.randint(-m, m+1, (n, n, m))
         case _:
             raise ValueError("Interaction type not recognised!")
     for p in players:
         interaction_coefs[p, p, :] = 0
     # How to deal with negative interactions?
     # interaction_coefs = interaction_coefs / np.abs(interaction_coefs).sum()
-        
+    
+    
     for _ in range(size):
+        weights = np.zeros((n, m))
         match weight_type:
             case "sym":
-                weight = np.random.randint(1, 101, m)
-                weights = np.zeros((n, m))
+                weight = np.arange(m) + 1
+                np.random.shuffle(weight)
                 for p in players:
                     weights[p, :] = weight
             case "asym":
-                weights = np.random.randint(1, 101, (n, m))
+                for p in players:
+                    weight = np.arange(m) + 1
+                    np.random.shuffle(weight)
+                    weights[p, :] = weight
             case _:
                 raise ValueError("Weight type not recognised!")
         problem = kpg.KPG(weights, payoffs, interaction_coefs, capacity)
@@ -88,7 +100,6 @@ def solve_player_problem(obs: kpg.KPG, sol: np.ndarray, p: int, payoffs: np.ndar
     return x.X
 
 
-
 def inverse_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult]) -> tuple:
     # Learn the payoffs and interactions using solutions to problems with varying weights
     example = obss[0]
@@ -99,8 +110,8 @@ def inverse_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult]) -> tuple:
     env = gp.Env()
     env.setParam("OutputFlag", 0)
     pm = gp.Model("InverseKPG")
-    payoff = pm.addMVar(example.payoffs.shape, lb=1, name="payoff")
-    inter = pm.addMVar(example.interaction_coefs.shape, name="inter")
+    payoff = pm.addMVar(example.payoffs.shape, vtype=GRB.INTEGER, name="payoff")
+    inter = pm.addMVar(example.interaction_coefs.shape, vtype=GRB.INTEGER, name="inter")
     for p in players:
         for i in range(example.m):
             inter[p, p, i].lb = 0
@@ -114,8 +125,72 @@ def inverse_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult]) -> tuple:
                                 for p2 in rivals[p])
                     for o, _ in enumerate(obss) for p in players}
     
-    pm.addConstrs(inter[p1, p2, 0] == inter[p1, p2, i] for i in range(1, example.m)
-                  for p1 in example.players for p2 in example.players)
+    pm.addConstrs(payoff[p, :].sum() == (example.m * example.m + example.m) / 2 for p in players)
+
+    pm.optimize()
+
+    if pm.Status == GRB.INFEASIBLE:
+        raise ValueError("Problem is Infeasible!")
+    
+    while True:    
+        new_partial = False
+        for o, obs in enumerate(obss):
+            for p in players:
+                sol = solutions[o].X
+                new_x = solve_player_problem(obs, sol, p, payoff.X, inter.X)
+                if not duplicate_array(partial_sols[o, p], new_x):
+                    # new information
+                    new_partial = True
+                    # add to solutions
+                    partial_sols[o, p].append(new_x)
+                    # add to pm
+                    new_profit = (payoff[p, :] * new_x).sum() + \
+                                 gp.quicksum(inter[p, p1, :] * new_x * sol[p1, :]
+                                             for p1 in rivals[p])
+                    pm.addConstr(delta[o, p] >= new_profit - og_profit[o, p])
+        
+        if new_partial:
+            pm.optimize()
+        else:
+            break
+
+    return payoff.X, inter.X
+
+def inverse_range_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult]) -> tuple:
+    # Learn the payoffs and interactions using solutions to problems with varying weights
+    example = obss[0]
+    players = example.players
+    items = list(range(example.m))
+    rivals = [[opp for opp in players if opp != player] for player in players]
+    partial_sols = {(o, p): [] for o in range(len(obss)) for p in players}
+    
+    env = gp.Env()
+    env.setParam("OutputFlag", 0)
+    pm = gp.Model("InverseRangeKPG")
+    bin_payoff = pm.addMVar((example.n, example.m, example.m), vtype=GRB.BINARY, name="bin_payoff")
+    payoff = pm.addMVar(example.payoffs.shape, vtype=GRB.INTEGER, name="payoff")
+    inter = pm.addMVar(example.interaction_coefs.shape, vtype=GRB.INTEGER, name="inter")
+    for p in players:
+        for i in items:
+            inter[p, p, i].lb = 0
+            inter[p, p, i].ub = 0
+    delta = pm.addMVar((len(obss), len(players)), name="delta")
+
+    pm.setObjective(delta.sum())
+
+    og_profit = {(o, p): (payoff[p, :] * solutions[o].X[p, :]).sum() +
+                    gp.quicksum(inter[p, p2, :] * solutions[o].X[p2, :] * solutions[o].X[p, :] 
+                                for p2 in rivals[p])
+                    for o, _ in enumerate(obss) for p in players}
+    
+    pm.addConstrs(bin_payoff[p, i, :].sum() == 1
+                  for p in players for i in items)
+    
+    pm.addConstrs(bin_payoff[p, :, i].sum() == 1
+                  for p in players for i in items)
+    
+    pm.addConstrs(payoff[p, i] == gp.quicksum(bin_payoff[p, i, val] * (val + 1) for val in items)
+              for p in players for i in items)
     
     pm.optimize()
 
@@ -150,17 +225,19 @@ if __name__ == "__main__":
     n = 2
     m = 10
 
-    problems = generate_problems(n*m, n, m, 0.5)
+    problems = generate_problems(n*n*m, n, m, 0.5, payoff_type="asym", weight_type="asym", interaction_type="none")
+    print(problems)
+    input("Press Enter to run")
     solutions = solve_problems(problems)
     example = problems[0]
 
-    payoff, interaction = inverse_KPG(problems, solutions)
+    payoff, interaction = inverse_range_KPG(problems, solutions)
 
     print("Original")
     print(example.payoffs) 
     print(example.interaction_coefs)
-    print(example.payoffs/example.payoffs.sum())
-    print(example.interaction_coefs/example.interaction_coefs.sum())
+    # print(example.payoffs/example.payoffs.sum())
+    # print(example.interaction_coefs/example.interaction_coefs.sum())
 
     print("Inverse")
     print(payoff)
