@@ -2,7 +2,6 @@ import gurobipy as gp
 from gurobipy import GRB
 import kpg
 import numpy as np
-from copy import copy
 from utils import duplicate_array
 
 def generate_payoff_problems(size: int, n: int, m: int, capacity: float, weight_type: str="sym",
