@@ -56,7 +56,7 @@ class KPG:
             self.interaction_type = "sym"
         else:
             self.interaction_type = "asym"
-        
+
         for p in self.players:
             if np.sum(np.abs(interaction_coefs[p, p])) != 0:
                 raise ValueError("Invalid Interaction")
@@ -164,10 +164,8 @@ def read_file(file: str) -> KPG:
 
 
 def create_player_oracle(kpg: KPG, player: int) -> tuple[gp.Model, gp.MVar, gp.MVar]:
-    env = gp.Env()
-    env.setParam("OutputFlag", 0)
 
-    m = gp.Model(f"LocalKPG[{player}]", env=env)
+    m = gp.Model(f"LocalKPG[{player}]")
     x = m.addMVar((kpg.n, kpg.m), vtype=GRB.BINARY, name="x")
     z = m.addMVar((kpg.n, kpg.n, kpg.m), vtype=GRB.BINARY, name="z")
 
@@ -248,9 +246,7 @@ def zero_regrets(kpg: KPG, verbose=False) -> KPGResult:
 
     oracles = {p: create_player_oracle(kpg, p) for p in kpg.players}
 
-    env = gp.Env()
-    env.setParam("OutputFlag", 0)
-    pm = gp.Model("ZeroRegrets", env=env)
+    pm = gp.Model("ZeroRegrets")
     x = pm.addMVar((kpg.n, kpg.m), vtype=GRB.BINARY, name="x")
     z = pm.addMVar((kpg.n, kpg.n, kpg.m), vtype=GRB.BINARY, name="z")
 
@@ -355,7 +351,8 @@ def zero_regrets(kpg: KPG, verbose=False) -> KPGResult:
         print(f"Reached INFEASIBLE with {current_obj} in {runtime} seconds")
         return KPGResult(False, current_x, current_obj, runtime, kpg)
 
-    print(f"{pm.ObjVal} in {runtime} seconds")
+    if verbose:
+        print(f"{pm.ObjVal} in {runtime} seconds")
 
     return KPGResult(True, x.X, pm.ObjVal, runtime, kpg)
 
