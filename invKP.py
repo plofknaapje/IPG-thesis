@@ -91,18 +91,22 @@ def generate_weight_problems(n_problems=10, n_items=10, capacity_perc=0.5, rng=N
     return problems
 
 
-def generate_payoff_problems(n_problems=10, n_items=10, capacity_perc=0.5, rng=None) -> list[KP]:
+def generate_payoff_problems(n_problems=10, n_items=10, capacity_perc: float|list=0.5, rng=None) -> list[KP]:
     if rng is None:
         rng = np.random.default_rng()
     problems = []
     weights = np.arange(1, n_items+1)
     payoffs = np.arange(1, n_items+1)
     rng.shuffle(payoffs)
-    capacity = int(weights.sum() * capacity_perc)
-    for _ in range(n_problems):
+    if type(capacity_perc) is float:
+        capacity = [int(weights.sum() * capacity_perc)]
+    elif type(capacity_perc) is list:
+        capacity = [int(weights.sum() * perc) for perc in capacity_perc]
+
+    for i in range(n_problems):
         problem_weights = weights.copy()
         rng.shuffle(problem_weights)
-        problem = KP(payoffs, problem_weights, capacity)
+        problem = KP(payoffs, problem_weights, capacity[i % len(capacity)])
         problem.solve()
         problems.append(problem)
 
@@ -111,7 +115,6 @@ def generate_payoff_problems(n_problems=10, n_items=10, capacity_perc=0.5, rng=N
 
 def inverse_weights(problems: list[KP], verbose=False, trim_lower=True) -> tuple[np.ndarray, int]:
     n_items = problems[0].n_items
-    capacity = problems[0].capacity
     proxy_weights = np.linspace(1, 1.01, n_items)
     true_value = [problem.solution @ problem.payoffs for problem in problems]
 
@@ -121,13 +124,13 @@ def inverse_weights(problems: list[KP], verbose=False, trim_lower=True) -> tuple
 
     w = model.addMVar((n_items), lb=1, vtype=GRB.INTEGER, name="weights")
 
-    model.setObjective(w @ proxy_weights)
+    model.setObjective(w.sum())
 
     model.addConstr(w.sum() >= (n_items + 1) * n_items / 2)
     model.addConstrs(w[i] <= n_items for i in range(n_items))
 
     for problem in problems:
-        model.addConstr(problem.solution @ w <= capacity)
+        model.addConstr(problem.solution @ w <= problem.capacity)
 
     model.optimize()
     if model.Status == GRB.INFEASIBLE:
@@ -144,19 +147,16 @@ def inverse_weights(problems: list[KP], verbose=False, trim_lower=True) -> tuple
                 # Experiment
                 if trim_lower:
                     selected_sum = new_solution @ w.X
-                    model.addConstr(w @ new_solution >= selected_sum + 1)
+                    model.addConstr(new_solution @ w >= selected_sum + 1)
+                else:
+                    continue
 
-                continue
             elif new_value == true_value[i]:
                 continue
-
-            if verbose:
-                print(i, new_solution)
+            else:
+                model.addConstr(new_solution @ w >= problem.capacity + 1)
 
             new_constraint = True
-            model.addConstr(new_solution @ w >= capacity + 1)
-
-            
 
         if not new_constraint:
             break
@@ -189,7 +189,7 @@ def inverse_payoffs(problems: list[KP], verbose=False) -> tuple[np.ndarray, int]
 
     model.setObjective(p.sum())
 
-    model.addConstr(p.sum() >= (n_items + 1) * n_items / 2)
+    model.addConstr(p.sum() == (n_items + 1) * n_items / 2)
 
     model.optimize()
 
@@ -234,8 +234,6 @@ def inverse_payoffs(problems: list[KP], verbose=False) -> tuple[np.ndarray, int]
 
 def inverse_delta_payoffs(problems: list[KP], verbose=False) -> tuple[np.ndarray, int]:
     n_items = problems[0].n_items
-    values = np.arange(1, n_items + 1)
-    proxy_weights = np.linspace(1, 1.01, n_items)
 
     model = gp.Model("Inverse Knapsack (Payoffs)")
 
@@ -293,6 +291,49 @@ def inverse_delta_payoffs(problems: list[KP], verbose=False) -> tuple[np.ndarray
     return p.X.astype(np.int64), model.SolCount
 
 
+def inverse_wang_payoffs(problems: list[KP], verbose=False) -> tuple[np.ndarray, int]:
+
+    n_items = problems[0].n_items
+
+    model = gp.Model("Inverse Knapsack (Payoffs)")
+
+    model.Params.PoolSearchMode = 2
+    model.Params.PoolSolutions = 10
+
+    p = model.addMVar((n_items), lb=1, ub=n_items, vtype=GRB.INTEGER)
+
+    model.setObjective(gp.quicksum(p @ problem.solution for problem in problems), GRB.MAXIMIZE)
+
+    model.addConstr(p.sum() <=  (n_items + 1) * n_items / 2)
+
+    model.optimize()
+
+    if model.Status == GRB.INFEASIBLE:
+        raise ValueError("Problem is Infeasible!")
+    
+    while True:
+        new_constraint = False
+
+        for i, problem in enumerate(problems):
+            new_solution = problem.payoff_solve(p.X)
+
+            if new_solution @ p.X <= problem.solution @ p.X:
+                continue
+
+            new_constraint = True
+            model.addConstr(problem.solution @ p >= new_solution @ p)
+
+        if not new_constraint:
+            break
+
+        model.optimize()
+
+        if model.Status == GRB.INFEASIBLE:
+            raise ValueError("Problem is Infeasible!")
+
+    return p.X.astype(np.int64), model.SolCount
+
+
 if __name__ == "__main__":
 
     start = time()
@@ -330,7 +371,7 @@ if __name__ == "__main__":
 
     if approach == "payoffs":
         payoff_bonus = n_items
-        problem_sets = [generate_payoff_problems(n_items + payoff_bonus + extras, n_items, capacity_perc=0.5, rng=rng)
+        problem_sets = [generate_payoff_problems(n_items + payoff_bonus + extras, n_items, capacity_perc=[0.5], rng=rng)
                         for _ in range(repeat)]
 
         for extra in range(extras):
@@ -341,7 +382,7 @@ if __name__ == "__main__":
 
             for problems in problem_sets:
                 payoffs = problems[0].payoffs
-                inv_payoffs, sols = inverse_delta_payoffs(problems[:index], verbose)
+                inv_payoffs, sols = inverse_wang_payoffs(problems[:index], verbose)
                 abs_errors.append(abs(payoffs - inv_payoffs).sum())
                 square_errors.append(((payoffs - inv_payoffs)**2).sum())
                 num_sols.append(sols)

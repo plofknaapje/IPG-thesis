@@ -305,15 +305,14 @@ def inverse_range_payoff_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult]
     return payoff.X, inter.X
 
 
-def inverse_weight_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult]) -> tuple:
+def inverse_weight_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult], trim_lower=False) -> tuple:
 
     example = obss[0]
     players = example.players
     items = list(range(example.m))
-    proxy_weights = np.linspace(1, 1.01, example.m)
     rivals = [[opp for opp in players if opp != player] for player in players]
     true_value = {(o, p): obs.payoffs[p, :] @ solutions[o].X[p, :] +
-                    sum(obs.interaction_coefs[p, p2, :] * solutions[o].X[p2, :] @ solutions[o].X[p, :]
+                    sum(obs.interaction_coefs[p, p2, :] * solutions[o].X[p, :] @ solutions[o].X[p2, :]
                                 for p2 in rivals[p])
                     for o, obs in enumerate(obss) for p in players}
 
@@ -321,7 +320,7 @@ def inverse_weight_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult]) -> t
 
     w = model.addMVar(example.weights.shape, lb=1, vtype=GRB.INTEGER, name="payoff")
 
-    model.setObjective(gp.quicksum(w[p, :] @ proxy_weights for p in players))
+    model.setObjective(w.sum())
 
     model.addConstrs(w[p, :].sum() >= (example.m + 1) * example.m / 2 for p in players)
     model.addConstrs(w[p, i] <= example.m for p in players for i in items)
@@ -332,22 +331,29 @@ def inverse_weight_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult]) -> t
         raise ValueError("Problem is Infeasible!")
 
     while True:
-        new_partial = False
+        new_constraint = False
+
         for o, obs in enumerate(obss):
             for p in players:
-                true_sol = solutions[o].X
-                new_x = solve_player_weights_problem(obs, true_sol, p, w.X)
-                new_value = new_x @ obs.payoffs[p, :] + \
-                    sum(obs.interaction_coefs[p, p2, :] * solutions[o].X[p2, :] @ new_x
+                new_solution = solve_player_weights_problem(obs, solutions[o].X, p, w.X)
+                new_value = new_solution @ obs.payoffs[p, :] + \
+                    sum(obs.interaction_coefs[p, p2, :] * new_solution @ solutions[o].X[p2, :]
                                 for p2 in rivals[p])
 
-                if new_value <= true_value[o, p]:
+                if new_value < true_value[o, p]:
+                    if trim_lower:
+                        selected_sum = new_solution @ w[p, :].X
+                        model.addConstr(new_solution @ w[p, :] >= selected_sum + 1)
+                    else:
+                        continue
+                elif new_value == true_value[o, p]:
                     continue
+                else:
+                    model.addConstr(new_solution @ w[p, :] >= obs.capacity[p] + 1)
+                
+                new_constraint = True
 
-                new_partial = True
-                model.addConstr(new_x @ w[p, :] >= example.capacity[p])
-
-        if not new_partial:
+        if not new_constraint:
             break
 
         model.optimize()
