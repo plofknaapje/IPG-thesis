@@ -21,7 +21,7 @@ for file in files:
         if sum(master_result.X[:, i]) > 0:
             payoffs = master_kpg.payoffs.copy()
             payoffs[:, i] = 0
-            interaction_coefs = master_kpg.interaction_coefs.copy()
+            interaction_coefs = master_kpg.inter_coefs.copy()
             interaction_coefs[:, :, i] = 0
             weights = master_kpg.weights
             instance = kpg.KPG(weights, payoffs, interaction_coefs, capacity=master_kpg.capacity)

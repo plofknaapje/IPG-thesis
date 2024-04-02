@@ -1,76 +1,9 @@
 import gurobipy as gp
 from gurobipy import GRB
-from dataclasses import dataclass
 import numpy as np
 from time import time
 from utils import duplicate_array
-
-@dataclass
-class KP:
-    n_items: int
-    payoffs: np.ndarray
-    weights: np.ndarray
-    capacity: int
-    solution: np.ndarray
-
-    def __init__(self, payoffs: np.ndarray, weights: np.ndarray, capacity: int):
-        self.payoffs = payoffs
-        self.weights = weights
-        self.capacity = capacity
-        self.solution = None
-        self.n_items = len(payoffs)
-
-    def solve(self) -> None:
-        if self.solution is not None:
-            print("Already solved")
-            return None
-
-        model = gp.Model("Knapsack Problem")
-
-        x = model.addMVar((self.n_items), vtype=GRB.BINARY, name="x")
-
-        model.setObjective(x @ self.payoffs, GRB.MAXIMIZE)
-
-        model.addConstr(x @ self.weights <= self.capacity)
-
-        model.optimize()
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible!")
-
-        self.solution = x.X
-
-    def weight_solve(self, weights: np.ndarray) -> np.ndarray:
-        model = gp.Model("Knapsack Problem")
-
-        x = model.addMVar((self.n_items), vtype=GRB.BINARY, name="x")
-
-        model.setObjective(x @ self.payoffs, GRB.MAXIMIZE)
-
-        model.addConstr(x @ weights <= self.capacity)
-
-        model.optimize()
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible!")
-
-        return x.X
-
-    def payoff_solve(self, payoffs: np.ndarray) -> np.ndarray:
-        model = gp.Model("Knapsack Problem")
-
-        x = model.addMVar((self.n_items), vtype=GRB.BINARY, name="x")
-
-        model.setObjective(x @ payoffs, GRB.MAXIMIZE)
-
-        model.addConstr(x @ self.weights <= self.capacity)
-
-        model.optimize()
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible!")
-
-        return x.X
+from kp import KP
 
 
 def generate_weight_problems(n_problems=10, r=100, n_items=10, capacity:float|np.ndarray=0.5, corr=True, rng=None) -> list[KP]:
@@ -81,8 +14,8 @@ def generate_weight_problems(n_problems=10, r=100, n_items=10, capacity:float|np
 
     if corr:
         lower = np.maximum(weights - r/10, 1)
-        upper = np.minimum(weights + r/10, r)
-    
+        upper = np.minimum(weights + r/10, r+1)
+
     if type(capacity) is float:
         capacity = np.ones(n_problems) * capacity
 
@@ -106,7 +39,7 @@ def generate_weight_range_problems(n_problems=10, n_items=10, capacity:float|np.
     weights = np.arange(1, n_items+1)
     payoffs = np.arange(1, n_items+1)
     rng.shuffle(weights)
-    
+
     if type(capacity) is float:
         capacity = np.ones(n_problems) * capacity
 
@@ -129,7 +62,7 @@ def generate_payoff_problems(n_problems=10, r=100, n_items=10, capacity:float|np
 
     if corr:
         lower = np.maximum(payoffs - r/10, 1)
-        upper = np.minimum(payoffs + r/10, r)
+        upper = np.minimum(payoffs + r/10, r+1)
 
     if type(capacity) is float:
         capacity = np.ones(n_problems) * capacity
@@ -194,7 +127,7 @@ def inverse_weights(problems: list[KP], verbose=False, trim_lower=True) -> tuple
         new_constraint = False
 
         for i, problem in enumerate(problems):
-            new_solution = problem.weight_solve(w.X)
+            new_solution = problem.solve_weights(w.X)
             new_value = new_solution @ problem.payoffs
 
             if new_value < true_value[i] and trim_lower:
@@ -210,11 +143,11 @@ def inverse_weights(problems: list[KP], verbose=False, trim_lower=True) -> tuple
 
         if not new_constraint:
             break
-        
+
         model.optimize()
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
-        
+
 
     # print()
     # print(problems[0].weights)
@@ -252,11 +185,11 @@ def inverse_payoffs(problems: list[KP], verbose=False) -> tuple[np.ndarray, int]
         new_constraint = False
 
         for i, problem in enumerate(problems):
-            new_solution = problem.payoff_solve(p.X)
+            new_solution = problem.solve_payoffs(p.X)
 
             if new_solution @ p.X <= problem.solution @ p.X:
                 continue
-            
+
             if verbose:
                 print(i)
                 print(problem.solution, problem.solution @ p.X, problem.solution @ problem.payoffs)
@@ -275,7 +208,7 @@ def inverse_payoffs(problems: list[KP], verbose=False) -> tuple[np.ndarray, int]
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
 
-    print() 
+    print()
     print(problem.payoffs)
     print(p.X)
 
@@ -310,11 +243,11 @@ def inverse_delta_payoffs(problems: list[KP], verbose=False) -> tuple[np.ndarray
         new_constraint = False
 
         for i, problem in enumerate(problems):
-            new_solution = problem.payoff_solve(p.X)
+            new_solution = problem.solve_payoffs(p.X)
 
             if new_solution @ p.X <= problem.solution @ p.X:
                 continue
-            
+
             if duplicate_array(solutions[i], new_solution):
                 continue
 
@@ -360,12 +293,12 @@ def inverse_direct_payoffs(problems: list[KP], verbose=False) -> tuple[np.ndarra
 
     if model.Status == GRB.INFEASIBLE:
         raise ValueError("Problem is Infeasible!")
-    
+
     while True:
         new_constraint = False
 
         for i, problem in enumerate(problems):
-            new_solution = problem.payoff_solve(p.X)
+            new_solution = problem.solve_payoffs(p.X)
 
             if new_solution @ p.X <= problem.solution @ p.X:
                 continue
@@ -404,13 +337,13 @@ def inverse_wang_payoffs(problems: list[KP], verbose=False) -> tuple[np.ndarray,
 
     if model.Status == GRB.INFEASIBLE:
         raise ValueError("Problem is Infeasible!")
-    
+
     while True:
         new_constraint = False
 
         for i, problem in enumerate(problems):
             p = base_vector + h.X - l.X
-            new_solution = problem.payoff_solve(p)
+            new_solution = problem.solve_payoffs(p)
 
             if new_solution @ p <= problem.solution @ p:
                 continue

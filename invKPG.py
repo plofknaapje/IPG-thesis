@@ -65,10 +65,6 @@ def generate_payoff_problems(size: int, n: int, m: int, capacity: float, weight_
                 raise ValueError("Weight type not recognised!")
         problem = kpg.KPG(weights, payoffs, interaction_coefs, capacity)
 
-        problem.interaction_type = interaction_type
-        problem.weights_type = weight_type
-        problem.payoffs_type = payoff_type
-
         problems.append(problem)
 
     return problems
@@ -137,10 +133,6 @@ def generate_weight_problems(size: int, n: int, m: int, capacity: float, weight_
 
         problem = kpg.KPG(weights, payoffs, interaction_coefs, capacity)
 
-        problem.interaction_type = interaction_type
-        problem.weights_type = weight_type
-        problem.payoffs_type = payoff_type
-
         problems.append(problem)
 
     return problems
@@ -176,7 +168,7 @@ def solve_player_weights_problem(obs: kpg.KPG, sol: np.ndarray, p: int, weights:
     x = model.addMVar((obs.m), vtype=GRB.BINARY, name="x")
 
     base_payoff = obs.payoffs[p, :] @ x
-    interactions = gp.quicksum(obs.interaction_coefs[p, p2, :] * sol[p2, :] @ x
+    interactions = gp.quicksum(obs.inter_coefs[p, p2, :] * sol[p2, :] @ x
                                    for p2 in rivals[p])
 
     model.setObjective(base_payoff + interactions, GRB.MAXIMIZE)
@@ -196,7 +188,7 @@ def inverse_payoff_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult]) -> t
 
     pm = gp.Model("InverseKPG")
     payoff = pm.addMVar(example.payoffs.shape, vtype=GRB.INTEGER, name="payoff")
-    inter = pm.addMVar(example.interaction_coefs.shape, vtype=GRB.INTEGER, name="inter")
+    inter = pm.addMVar(example.inter_coefs.shape, vtype=GRB.INTEGER, name="inter")
     for p in players:
         for i in range(example.m):
             inter[p, p, i].lb = 0
@@ -252,7 +244,7 @@ def inverse_range_payoff_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult]
     pm = gp.Model("InverseRangeKPG")
     bin_payoff = pm.addMVar((example.n, example.m, example.m), vtype=GRB.BINARY, name="bin_payoff")
     payoff = pm.addMVar(example.payoffs.shape, vtype=GRB.INTEGER, name="payoff")
-    inter = pm.addMVar(example.interaction_coefs.shape, vtype=GRB.INTEGER, name="inter")
+    inter = pm.addMVar(example.inter_coefs.shape, vtype=GRB.INTEGER, name="inter")
     for p in players:
         for i in items:
             inter[p, p, i].lb = 0
@@ -312,7 +304,7 @@ def inverse_weight_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult], trim
     items = list(range(example.m))
     rivals = [[opp for opp in players if opp != player] for player in players]
     true_value = {(o, p): obs.payoffs[p, :] @ solutions[o].X[p, :] +
-                    sum(obs.interaction_coefs[p, p2, :] * solutions[o].X[p, :] @ solutions[o].X[p2, :]
+                    sum(obs.inter_coefs[p, p2, :] * solutions[o].X[p, :] @ solutions[o].X[p2, :]
                                 for p2 in rivals[p])
                     for o, obs in enumerate(obss) for p in players}
 
@@ -337,7 +329,7 @@ def inverse_weight_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult], trim
             for p in players:
                 new_solution = solve_player_weights_problem(obs, solutions[o].X, p, w.X)
                 new_value = new_solution @ obs.payoffs[p, :] + \
-                    sum(obs.interaction_coefs[p, p2, :] * new_solution @ solutions[o].X[p2, :]
+                    sum(obs.inter_coefs[p, p2, :] * new_solution @ solutions[o].X[p2, :]
                                 for p2 in rivals[p])
 
                 if new_value < true_value[o, p]:
@@ -350,7 +342,7 @@ def inverse_weight_KPG(obss: list[kpg.KPG], solutions: list[kpg.KPGResult], trim
                     continue
                 else:
                     model.addConstr(new_solution @ w[p, :] >= obs.capacity[p] + 1)
-                
+
                 new_constraint = True
 
         if not new_constraint:
@@ -386,7 +378,7 @@ if __name__ == "__main__":
 
         print("Original")
         print(example.payoffs)
-        print(example.interaction_coefs)
+        print(example.inter_coefs)
 
         print("Inverse")
         print(payoff)
