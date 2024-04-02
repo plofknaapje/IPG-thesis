@@ -13,6 +13,7 @@ class KPG:
     n: int  # number of players
     m: int  # number of items
     players: list  # list of player indices, length n
+    opps: list # opponents of each player
     capacity: list  # carrying capacity of each player, length n
     weights: np.ndarray  # weights of the items, size (n, m)
     payoffs: np.ndarray  # payoffs of the items, size (n, m)
@@ -27,6 +28,7 @@ class KPG:
         self.inter_coefs = inter_coefs
         self.players = list(range(self.n))
         self.pairs = list(itertools.permutations(self.players, 2))
+        self.opps = [[o for p, o in self.pairs if p == j] for j in self.players]
 
         if type(capacity) is float:
             self.capacity = [
@@ -46,19 +48,18 @@ class KPG:
         print("Interaction coefficients")
         print(self.inter_coefs)
 
-    def solve_player_weights(self, weights: np.ndarray, p: int) -> np.ndarray:
-        pairs = [pair for pair in self.pairs if pair[0] == p]
+    def solve_player_weights(self, weights: np.ndarray, player: int) -> np.ndarray:
 
         model = gp.Model("Knapsack Problem")
 
         x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
 
-        model.setObjective(x @ self.payoffs[p, :] +
-                           gp.quicksum(x * self.solution[opp, :] @ self.inter_coefs[p, opp, :]
-                                       for _, opp in pairs),
+        model.setObjective(x @ self.payoffs[player] +
+                           gp.quicksum(x * self.solution[opp] @ self.inter_coefs[player, opp]
+                                       for opp in self.opps[player]),
                            GRB.MAXIMIZE)
 
-        model.addConstr(x @ weights[p, :] <= self.capacity[p])
+        model.addConstr(x @ weights[player] <= self.capacity[player])
 
         model.optimize()
 
@@ -67,19 +68,18 @@ class KPG:
 
         return x.X
 
-    def solve_player_payoffs(self, payoffs: np.ndarray, p: int) -> np.ndarray:
-        pairs = [pair for pair in self.pairs if pair[0] == p]
+    def solve_player_payoffs(self, payoffs: np.ndarray, player: int) -> np.ndarray:
 
         model = gp.Model("Knapsack Problem")
 
         x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
 
-        model.setObjective(x @ payoffs[p, :] +
-                           gp.quicksum(x * self.solution[opp, :] @ self.inter_coefs[p, opp, :]
-                                       for _, opp in pairs),
+        model.setObjective(x @ payoffs[player] +
+                           gp.quicksum(x * self.solution[opp] @ self.inter_coefs[player, opp]
+                                       for opp in self.opps[player]),
                            GRB.MAXIMIZE)
 
-        model.addConstr(x @ self.weights <= self.capacity[p])
+        model.addConstr(x @ self.weights[player] <= self.capacity[player])
 
         model.optimize()
 
@@ -98,29 +98,27 @@ class KPG:
         self.PNE = result.PNE
         return self.solution
 
-    def obj_value(self, p: int, solution: np.ndarray) -> int|float:
-        pairs = [pair for pair in self.pairs if pair[0] == p]
+    def obj_value(self, player: int, solution: np.ndarray) -> int|float:
 
-        value = solution[p, :] @ self.payoffs[p, :]
+        value = solution[player] @ self.payoffs[player]
 
-        for _, opp in pairs:
-            value += solution[p, :] * solution[opp, :] @ self.inter_coefs[p, opp]
+        for opp in self.opps[player]:
+            value += solution[player] * solution[opp] @ self.inter_coefs[player, opp]
 
         return value
 
-    def solved_obj_value(self, p: int, player_sol=None) -> int|float:
-        pairs = [pair for pair in self.pairs if pair[0] == p]
+    def solved_obj_value(self, player: int, player_sol=None) -> int|float:
 
         if player_sol is None:
-            value = self.solution[p, :] @ self.payoffs[p, :]
+            value = self.solution[player] @ self.payoffs[player]
 
-            for _, opp in pairs:
-                value += self.solution[p, :] * self.solution[opp, :] @ self.inter_coefs[p, opp, :]
+            for opp in self.opps[player]:
+                value += self.solution[player] * self.solution[opp] @ self.inter_coefs[player, opp]
         else:
-            value = player_sol @ self.payoffs[p, :]
+            value = player_sol @ self.payoffs[player]
 
-            for _, opp in pairs:
-                value += player_sol * self.solution[opp, :] @ self.inter_coefs[p, opp, :]
+            for opp in self.opps[player]:
+                value += player_sol * self.solution[opp] @ self.inter_coefs[player, opp]
 
         return value
 
@@ -219,8 +217,8 @@ def create_player_oracle(kpg: KPG, player: int) -> tuple[gp.Model, gp.MVar, gp.M
     z = m.addMVar((kpg.n, kpg.n, kpg.m), vtype=GRB.BINARY, name="z")
 
     m.setObjective(kpg.payoffs[player, :] @ x[player, :] +
-                   gp.quicksum(kpg.inter_coefs[p1, p2, :] @ z[p1, p2, :]
-                               for p1, p2 in kpg.pairs if p1 == player),
+                   gp.quicksum(kpg.inter_coefs[player, opp, :] @ z[player, opp, :]
+                               for opp in kpg.opps[player]),
                    GRB.MAXIMIZE)
 
     for p in kpg.players:
@@ -369,18 +367,18 @@ def zero_regrets(kpg: KPG, verbose=False, eps=1e-7) -> KPGResult:
         # Add cuts to the problem for each player which has a better solution.
         for p in kpg.players:
             obj = kpg.payoffs[p, :] @ current_x[p, :] + \
-                sum(kpg.inter_coefs[p1, p2, :] @ current_z[p1, p2, :]
-                    for p1, p2 in kpg.pairs if p1 == p)
+                sum(kpg.inter_coefs[p, p2, :] @ current_z[p, p2, :]
+                    for p2 in kpg.opps[p])
 
             new_x, new_obj = oracle_optimization(oracles[p], kpg, current_x, p)
             if new_obj >= obj + eps:
                 # Add constraint!
                 pm.addConstr(kpg.payoffs[p, :] @ new_x[p, :] +
-                             gp.quicksum(kpg.inter_coefs[p1, p2, j] * new_x[p1, j] * x[p2, j]
-                                         for j in range(kpg.m) for p1, p2 in kpg.pairs if p1 == p) <=
+                             gp.quicksum(kpg.inter_coefs[p, p2, j] * new_x[p, j] * x[p2, j]
+                                         for j in range(kpg.m) for p2 in kpg.opps[p]) <=
                              gp.quicksum(kpg.payoffs[p, j] * x[p, j] for j in range(kpg.m)) +
-                             gp.quicksum(kpg.inter_coefs[p1, p2, j] * z[p1, p2, j]
-                                         for j in range(kpg.m) for p1, p2 in kpg.pairs if p1 == p))
+                             gp.quicksum(kpg.inter_coefs[p, p2, j] * z[p, p2, j]
+                                         for j in range(kpg.m) for p2 in kpg.opps[p]))
                 cuts += 1
                 finished = False
 
