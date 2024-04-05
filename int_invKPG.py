@@ -51,7 +51,7 @@ def generate_payoff_problems(size: int, n: int, m: int, r :int, capacity: float|
     if rng is None:
         rng = np.random.default_rng()
 
-    
+
 
     problems = []
 
@@ -88,7 +88,7 @@ def generate_payoff_problems(size: int, n: int, m: int, r :int, capacity: float|
     return problems
 
 
-def inverse_weights(problems: list[KPG]) -> np.ndarray:
+def inverse_weights(problems: list[KPG], verbose=False) -> np.ndarray:
     n = problems[0].n
     players = problems[0].players
     m = problems[0].m
@@ -115,6 +115,7 @@ def inverse_weights(problems: list[KPG]) -> np.ndarray:
 
     while True:
         new_constraint = False
+        curr_w = w.X
 
         for i, problem in enumerate(problems):
 
@@ -131,19 +132,26 @@ def inverse_weights(problems: list[KPG]) -> np.ndarray:
 
         model.optimize()
 
+        if np.array_equal(curr_w, w.X):
+            break
+
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
+
+        if verbose:
+            error = np.abs(w.X - problems[0].weights).sum()
+            print(error, error / problems[0].weights.sum())
 
     return w.X
 
 
-def inverse_payoffs(problems: list[KPG]) -> np.ndarray:
-    # Uses the delta method
+def inverse_payoffs(problems: list[KPG], verbose=False) -> np.ndarray:
+    # Uses the hybrid delta-value method
     n_problems = len(problems)
     n = problems[0].n
     players = problems[0].players
     m = problems[0].m
-    
+
     model = gp.Model("Inverse KPG (Weights)")
 
     delta = model.addMVar((n_problems, n), name="delta")
@@ -153,7 +161,7 @@ def inverse_payoffs(problems: list[KPG]) -> np.ndarray:
 
     model.addConstrs(p[j].sum() <= problems[0].payoffs[j].sum() for j in players)
 
-    true_values = {(i, j): problem.solution[j] @ p[j] + 
+    true_values = {(i, j): problem.solution[j] @ p[j] +
                    sum(problem.solution[j] * problem.solution[o] @ problem.inter_coefs[j, o]
                                for o in problem.opps[j])
                    for i, problem in enumerate(problems) for j in players}
@@ -162,17 +170,19 @@ def inverse_payoffs(problems: list[KPG]) -> np.ndarray:
 
     if model.Status == GRB.INFEASIBLE:
         raise ValueError("Problem is Infeasible!")
-    
+
     solutions = {(i, j): set() for i in range(n_problems) for j in players}
-    
+
     while True:
         new_constraint = False
+        curr_p = p.X # for comparison after optimization
 
         for i, problem in enumerate(problems):
             for j in players:
                 new_solution = problem.solve_player_payoffs(p.X, j)
                 if tuple(new_solution) in solutions[i, j]:
                     continue
+
                 new_value = new_solution @ p[j] + \
                     sum(new_solution * problem.solution[o] @ problem.inter_coefs[j, o]
                                 for o in problem.opps[j])
@@ -183,7 +193,7 @@ def inverse_payoffs(problems: list[KPG]) -> np.ndarray:
                 temp_new_value = new_solution @ p.X[j] + \
                     sum(new_solution * problem.solution[o] @ problem.inter_coefs[j, o]
                                 for o in problem.opps[j])
-                
+
                 temp_true_value = problem.solution[j] @ p.X[j] + \
                     sum(problem.solution[j] * problem.solution[o] @ problem.inter_coefs[j, o]
                                 for o in problem.opps[j])
@@ -196,9 +206,16 @@ def inverse_payoffs(problems: list[KPG]) -> np.ndarray:
 
         model.optimize()
 
+        if np.array_equal(p.X, curr_p):
+            break
+
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
-    
+
+        if verbose:
+            error = np.abs(p.X - problems[0].payoffs).sum()
+            print(error, error / problems[0].payoffs.sum())
+
     return p.X
 
 
@@ -210,21 +227,24 @@ if __name__ == "__main__":
 
     match approach:
         case "weight":
-            weight_problems = generate_weight_problems(100, 2, 30, 100, [0.5, 0.5], corr=True, rng=rng)
+            weight_problems = generate_weight_problems(50, 2, 30, 100, [0.5, 0.5], corr=True, rng=rng)
             print("Problem generation finished")
 
             values = weight_problems[0].weights
 
-            inverse = inverse_weights(weight_problems)
+            inverse = inverse_weights(weight_problems[:i], verbose=False)
+
 
         case "payoff":
-            payoff_problems = generate_payoff_problems(100, 2, 15, 100, [0.5, 0.5], corr=True, rng=rng)
+            payoff_problems = generate_payoff_problems(200, 2, 10, 100, [0.5, 0.5], corr=False, rng=rng)
 
             print("Problem generation finished")
 
             values = payoff_problems[0].payoffs
 
-            inverse = inverse_payoffs(payoff_problems)
+            inverse = inverse_payoffs(payoff_problems, verbose=True)
+        case _:
+            raise ValueError("Unknown approach!")
 
     print(values)
     print(inverse)
