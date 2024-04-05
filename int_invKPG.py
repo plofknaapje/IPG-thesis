@@ -51,8 +51,6 @@ def generate_payoff_problems(size: int, n: int, m: int, r :int, capacity: float|
     if rng is None:
         rng = np.random.default_rng()
 
-
-
     problems = []
 
     payoffs = rng.integers(1, r+1, (n, m))
@@ -103,7 +101,6 @@ def inverse_weights(problems: list[KPG], verbose=False) -> np.ndarray:
 
     model.addConstrs(w[j].sum() >= problems[0].weights[j].sum() for j in players)
 
-
     for problem in problems:
         for j in players:
             model.addConstr(problem.solution[j] @ w[j] <= problem.capacity[j])
@@ -138,11 +135,15 @@ def inverse_weights(problems: list[KPG], verbose=False) -> np.ndarray:
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
 
-        if verbose:
-            error = np.abs(w.X - problems[0].weights).sum()
-            print(error, error / problems[0].weights.sum())
+    inverse = w.X
 
-    return w.X
+    if verbose:
+        error = np.abs(inverse - problems[0].weights).sum()
+        print(error, error / problems[0].weights.sum())
+
+    model.close()    
+
+    return inverse
 
 
 def inverse_payoffs(problems: list[KPG], verbose=False) -> np.ndarray:
@@ -211,12 +212,16 @@ def inverse_payoffs(problems: list[KPG], verbose=False) -> np.ndarray:
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
+    
+    inverse = p.X
 
-        if verbose:
-            error = np.abs(p.X - problems[0].payoffs).sum()
+    if verbose:
+            error = np.abs(inverse - problems[0].payoffs).sum()
             print(error, error / problems[0].payoffs.sum())
 
-    return p.X
+    model.close()
+
+    return inverse
 
 
 if __name__ == "__main__":

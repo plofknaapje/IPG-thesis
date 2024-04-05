@@ -98,7 +98,11 @@ def inverse_weights(problems: list[KP]) -> np.ndarray:
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
 
-    return w.X
+    inverse = w.X
+
+    model.close()
+
+    return inverse
 
 
 def inverse_payoffs_direct(problems: list[KP]) -> np.ndarray:
@@ -137,7 +141,11 @@ def inverse_payoffs_direct(problems: list[KP]) -> np.ndarray:
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
 
-    return p.X
+    inverse = p.X
+
+    model.close()
+
+    return inverse
 
 
 def inverse_payoffs_delta(problems: list[KP]) -> np.ndarray:
@@ -178,8 +186,12 @@ def inverse_payoffs_delta(problems: list[KP]) -> np.ndarray:
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
+        
+    inverse = p.X
 
-    return p.X
+    model.close()
+
+    return inverse
 
 
 def inverse_payoffs_hybrid(problems: list[KP]) -> np.ndarray:
@@ -216,6 +228,7 @@ def inverse_payoffs_hybrid(problems: list[KP]) -> np.ndarray:
 
             if tuple(new_solution) in solutions[i]:
                 continue
+
             model.addConstr(delta[i] >= new_solution @ p - problem.solution @ p)
             new_constraint = True
             solutions[i].add(tuple(new_solution))
@@ -228,7 +241,11 @@ def inverse_payoffs_hybrid(problems: list[KP]) -> np.ndarray:
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
 
-    return p.X
+    inverse = p.X
+
+    model.close()
+
+    return inverse
 
 
 if __name__ == "__main__":
@@ -236,18 +253,18 @@ if __name__ == "__main__":
     start = time()
     rng = np.random.default_rng(0)
 
-    approach = "payoff"
+    approach = "weight"
 
     match approach:
         case "weight":
-            weight_problems = generate_weight_problems(size=80, m=40, rng=rng, corr=True)
+            weight_problems = generate_weight_problems(size=100, m=50, rng=rng, corr=True)
             print("Finished generating problems")
 
             values = weight_problems[0].weights
             inverse = inverse_weights(weight_problems)
 
         case "payoff":
-            payoff_problems = generate_payoff_problems(size=50, m=25, rng=rng)
+            payoff_problems = generate_payoff_problems(size=100, m=25, rng=rng)
             print("Finished generating problems")
 
             values = payoff_problems[0].payoffs

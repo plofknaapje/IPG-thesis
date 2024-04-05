@@ -66,7 +66,11 @@ class KPG:
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
 
-        return x.X
+        result = x.X
+
+        model.close()
+        
+        return result
 
     def solve_player_payoffs(self, payoffs: np.ndarray, player: int) -> np.ndarray:
 
@@ -86,7 +90,11 @@ class KPG:
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
 
-        return x.X
+        result = x.X
+
+        model.close()
+        
+        return result
 
     def solve(self, verbose=False) -> np.ndarray:
         if self.solution is not None:
@@ -352,7 +360,7 @@ def zero_regrets(kpg: KPG, verbose=False, eps=1e-7) -> KPGResult:
         # Check if a player has net-negative variables and exclude the solutions with them.
         for p in kpg.players:
             for j in range(kpg.m):
-                if current_x[p, j] == 0: # type: ignore
+                if current_x[p, j] == 0: 
                     continue
                 elif kpg.payoffs[p, j] * current_x[p, j] + \
                     sum(kpg.inter_coefs[p, o, j] * current_z[p, o, j]
@@ -400,7 +408,14 @@ def zero_regrets(kpg: KPG, verbose=False, eps=1e-7) -> KPGResult:
     if verbose:
         print(f"{pm.ObjVal} in {runtime} seconds")
 
-    return KPGResult(True, x.X, pm.ObjVal, runtime)
+    result = x.X
+
+    pm.close()
+
+    for p in kpg.players:
+        oracles[p][0].close()
+
+    return KPGResult(True, result, pm.ObjVal, runtime)
 
 
 if __name__ == "__main__":
