@@ -1,15 +1,17 @@
+from dataclasses import dataclass
+
 import networkx as nx
 import matplotlib.pyplot as plt
 import gurobipy as gp
 from gurobipy import GRB
-from dataclasses import dataclass
 
 env = gp.Env("gurobi.log")
 
 
 @dataclass
-class KEP:
-    "Class for KEP problems"
+class KidneyExchangeProblem:
+    "Class for Kidney Exchange Problem"
+
     nodes: list
     edges: list
     G: nx.DiGraph
@@ -23,11 +25,12 @@ class KEP:
 
     def add_cycles(self, max_length):
         if self.cycles is None:
-            self.cycles = [tuple(cycle)
-                           for cycle in nx.simple_cycles(self.G, max_length)]
+            self.cycles = [
+                tuple(cycle) for cycle in nx.simple_cycles(self.G, max_length)
+            ]
 
 
-def simple_kep_solver(kep: KEP) -> list:
+def simple_kep_solver(kep: KidneyExchangeProblem) -> list:
     try:
         m = gp.Model("KEP", env=env)
         m_edges = m.addVars(kep.edges, vtype=GRB.BINARY, name="t")
@@ -36,14 +39,14 @@ def simple_kep_solver(kep: KEP) -> list:
         m.setObjective(m_edges.sum(), GRB.MAXIMIZE)
 
         m.addConstrs(
-            gp.quicksum(m_edges[i, o]
-                        for i, o in edges if i == node) == m_nodes[node]
-            for node in kep.nodes)
+            gp.quicksum(m_edges[i, o] for i, o in edges if i == node) == m_nodes[node]
+            for node in kep.nodes
+        )
 
         m.addConstrs(
-            gp.quicksum(m_edges[i, o]
-                        for i, o in edges if o == node) == m_nodes[node]
-            for node in kep.nodes)
+            gp.quicksum(m_edges[i, o] for i, o in edges if o == node) == m_nodes[node]
+            for node in kep.nodes
+        )
 
         m.optimize()
 
@@ -63,7 +66,7 @@ def simple_kep_solver(kep: KEP) -> list:
         print("Encountered an attribute error")
 
 
-def cycle_kep_solver(kep: KEP, max_length: int) -> list:
+def cycle_kep_solver(kep: KidneyExchangeProblem, max_length: int) -> list:
     kep.add_cycles(max_length)
 
     try:
@@ -71,12 +74,14 @@ def cycle_kep_solver(kep: KEP, max_length: int) -> list:
         m_cycles = m.addVars(kep.cycles, vtype=GRB.BINARY, name="c")
         m_nodes = m.addVars(kep.nodes, vtype=GRB.BINARY, name="p")
 
-        m.setObjective(gp.quicksum(len(cycle) * m_cycles[cycle]
-                                   for cycle in kep.cycles), GRB.MAXIMIZE)
+        m.setObjective(
+            gp.quicksum(len(cycle) * m_cycles[cycle] for cycle in kep.cycles),
+            GRB.MAXIMIZE,
+        )
 
         m.addConstrs(
-            gp.quicksum(m_cycles[cycle]
-                        for cycle in kep.cycles if node in cycle) == m_nodes[node]
+            gp.quicksum(m_cycles[cycle] for cycle in kep.cycles if node in cycle)
+            == m_nodes[node]
             for node in kep.nodes
         )
 
@@ -98,7 +103,7 @@ def cycle_kep_solver(kep: KEP, max_length: int) -> list:
         print("Encountered an attribute error")
 
 
-problem = KEP(20, 0.1)
+problem = KidneyExchangeProblem(20, 0.1)
 
 transplants = simple_kep_solver(problem)
 unused_edges = [edge for edge in edges if edge not in transplants]

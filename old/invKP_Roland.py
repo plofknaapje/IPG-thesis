@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import gurobipy as gp
 from gurobipy import GRB
 
+
 @dataclass
 class KP:
     n_items: int
@@ -11,9 +12,8 @@ class KP:
     capacity: int
     solution: np.ndarray | None = None
     solution_type: str | None = None
-    
-    def solve(self):
 
+    def solve(self):
         if self.solution is not None and self.solution_type == "exact":
             print("Solution is already exact")
             return None
@@ -33,13 +33,12 @@ class KP:
 
         self.solution = x.X
         self.solution_type = "exact"
-    
-    def greedy_solve(self):
 
+    def greedy_solve(self):
         if self.solution is not None and self.solution_type == "greedy":
             print("Solution is already greedy")
             return None
-        
+
         p_w_ratio = self.payoffs / self.weights
         x = np.zeros(self.n_items)
         total_weight = 0
@@ -49,16 +48,16 @@ class KP:
             if total_weight + self.weights[highest] <= self.capacity:
                 x[highest] = 1
                 total_weight += self.weights[highest]
-            
+
             p_w_ratio[highest] = 0
-        
+
         self.solution = x
         self.solution_type = "greedy"
 
 
-
-
-def generate_roland_instances(n=100, r=1000, instance_class=1, type=1, p=0.5, solution="greedy") -> list[KP]:
+def generate_roland_instances(
+    n=100, r=1000, instance_class=1, type=1, p=0.5, solution="greedy"
+) -> list[KP]:
     payoffs = []
     weights = []
     capacities = []
@@ -77,19 +76,19 @@ def generate_roland_instances(n=100, r=1000, instance_class=1, type=1, p=0.5, so
         case 1:
             for i in range(s):
                 rng = np.random.default_rng(i)
-                weights.append(rng.integers(1, r+1, n))
-                payoffs.append(rng.integers(1, r+1, n))
+                weights.append(rng.integers(1, r + 1, n))
+                payoffs.append(rng.integers(1, r + 1, n))
         case 2:
             for i in range(s):
                 rng = np.random.default_rng(i)
-                weights.append(rng.integers(1, r+1, n))
-                lower = np.maximum(weights[-1] - r/10, 1)
-                upper = np.minimum(weights[-1] + r/10, r)
+                weights.append(rng.integers(1, r + 1, n))
+                lower = np.maximum(weights[-1] - r / 10, 1)
+                upper = np.minimum(weights[-1] + r / 10, r)
                 payoffs.append(rng.integers(lower, upper))
         case 3:
             for i in range(s):
                 rng = np.random.default_rng(i * 10)
-                weights.append(rng.integers(1, r+1, n))
+                weights.append(rng.integers(1, r + 1, n))
                 payoffs.append(weights[-1] + 10)
         case _:
             raise ValueError("Unknown instance class")
@@ -97,7 +96,7 @@ def generate_roland_instances(n=100, r=1000, instance_class=1, type=1, p=0.5, so
     match type:
         case 1:
             for i in range(s):
-                capacities.append(max(r, np.floor(i/(s+1) * weights[i].sum())))
+                capacities.append(max(r, np.floor(i / (s + 1) * weights[i].sum())))
         case 2:
             for i in range(s):
                 capacities.append(max(r, np.floor(p * weights[i].sum())))
@@ -106,7 +105,7 @@ def generate_roland_instances(n=100, r=1000, instance_class=1, type=1, p=0.5, so
                 capacities.append(max(r, np.floor(p * weights[i].sum())))
         case _:
             raise ValueError("Unknown type")
-        
+
     instances = [KP(n, payoffs[i], weights[i], capacities[i]) for i in range(s)]
     match solution:
         case "greedy":
@@ -117,20 +116,22 @@ def generate_roland_instances(n=100, r=1000, instance_class=1, type=1, p=0.5, so
                 instance.solve()
         case _:
             raise ValueError("Unknown solution type")
-    
+
     return instances
 
+
 instances = generate_roland_instances(instance_class=2, type=2, solution="greedy")
+
 
 def inverse_IKP_inf(instance: KP, p=None):
     if p is None:
         p = instance.payoffs
-        
+
     C = np.max((1 - instance.solution) * instance.payoffs)
     a = 0
     b = C
     while a != b:
-        k = a + np.floor((b-a) / 2)
+        k = a + np.floor((b - a) / 2)
         d = np.zeros(instance.n_items)
 
         for i in range(instance.n_items):
@@ -138,7 +139,7 @@ def inverse_IKP_inf(instance: KP, p=None):
                 d[i] = np.maximum(0, instance.payoffs[i] - k)
             else:
                 d[i] = instance.payoffs[i] + k
-        
+
         new_KP = KP(instance.n_items, d, instance.weights, instance.capacity)
         new_KP.solve()
         opt = d @ new_KP.solution

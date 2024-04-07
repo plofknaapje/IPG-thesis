@@ -6,7 +6,14 @@ import os
 # method.
 
 prefix = "instances_kp/generated/"
-files = ["2-25-2-cij", "2-25-5-cij", "2-25-8-cij", "3-25-2-cij", "3-25-5-cij", "3-25-8-cij"]
+files = [
+    "2-25-2-cij",
+    "2-25-5-cij",
+    "2-25-8-cij",
+    "3-25-2-cij",
+    "3-25-5-cij",
+    "3-25-8-cij",
+]
 
 for file in files:
     if os.path.isfile(f"pickles/{file}.pickle"):
@@ -24,11 +31,11 @@ for file in files:
             interaction_coefs = master_kpg.inter_coefs.copy()
             interaction_coefs[:, :, i] = 0
             weights = master_kpg.weights
-            instance = kpg.KPG(weights, payoffs, interaction_coefs, capacity=master_kpg.capacity)
-            results[i] = (kpg.zero_regrets(instance))
+            instance = kpg.KPG(
+                weights, payoffs, interaction_coefs, capacity=master_kpg.capacity
+            )
+            results[i] = kpg.zero_regrets(instance)
             print(results[i].ObjVal)
 
     with open(f"pickles/{file}.pickle", "wb") as f:
         pickle.dump(results, f, pickle.HIGHEST_PROTOCOL)
-
-
