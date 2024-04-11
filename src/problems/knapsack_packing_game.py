@@ -54,7 +54,7 @@ class KnapsackPackingGame:
         print("Interaction coefficients")
         print(self.inter_coefs)
 
-    def solve_player_weights(self, weights: np.ndarray, player: int) -> np.ndarray:
+    def solve_player_weights(self, weights: np.ndarray, player: int, solution = np.ndarray | None = None) -> np.ndarray:
         """
         Solves the KPG from the perspective of one player given the solutions of
         other players using a given set of weights.
@@ -62,6 +62,7 @@ class KnapsackPackingGame:
         Args:
             weights (np.ndarray): new weights.
             player (int): index of the player.
+            solution (np.ndaray | None, optional): external solution. If None, use self.solution. Defaults to None.
 
         Raises:
             ValueError: if the problem is infeasible.
@@ -69,6 +70,9 @@ class KnapsackPackingGame:
         Returns:
             np.ndarray: optimal solution to the problem.
         """
+        if solution is None:
+            solution = self.solution
+
         model = gp.Model("Knapsack Problem")
 
         x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
@@ -76,7 +80,7 @@ class KnapsackPackingGame:
         model.setObjective(
             x @ self.payoffs[player]
             + gp.quicksum(
-                x * self.solution[opp] @ self.inter_coefs[player, opp]
+                x * solution[opp] @ self.inter_coefs[player, opp]
                 for opp in self.opps[player]
             ),
             GRB.MAXIMIZE,
@@ -95,7 +99,7 @@ class KnapsackPackingGame:
 
         return result
 
-    def solve_player_payoffs(self, payoffs: np.ndarray, player: int) -> np.ndarray:
+    def solve_player_payoffs(self, payoffs: np.ndarray, player: int, solution: np.ndarray | None = None) -> np.ndarray:
         """
         Solves the KPG from the perspective of one player given the solutions of
         other players using a given set of payoffs.
@@ -103,6 +107,7 @@ class KnapsackPackingGame:
         Args:
             payoffs (np.ndarray): new payoffs.
             player (int): index of the player.
+            solution (np.ndaray | None, optional): external solution. If None, use self.solution. Defaults to None.
 
         Raises:
             ValueError: if the problem is infeasible.
@@ -110,6 +115,9 @@ class KnapsackPackingGame:
         Returns:
             np.ndarray: optimal solution to the problem.
         """
+        if solution is None:
+            solution = self.solution
+
         model = gp.Model("Knapsack Problem")
 
         x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
@@ -117,7 +125,7 @@ class KnapsackPackingGame:
         model.setObjective(
             x @ payoffs[player]
             + gp.quicksum(
-                x * self.solution[opp] @ self.inter_coefs[player, opp]
+                x * solution[opp] @ self.inter_coefs[player, opp]
                 for opp in self.opps[player]
             ),
             GRB.MAXIMIZE,
