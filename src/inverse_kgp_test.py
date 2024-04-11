@@ -6,6 +6,7 @@ from methods.inverse_kpg import *
 
 start = time()
 rng = np.random.default_rng(1)
+print(type(rng))
 
 approach = "weight"
 

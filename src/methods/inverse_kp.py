@@ -3,6 +3,7 @@ from time import time
 import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
+from numpy.random import Generator
 
 from problems.knapsack_problem import KnapsackProblem
 
@@ -10,18 +11,32 @@ eps = 0.001
 
 
 def generate_weight_problems(
-    size: int = 50,
-    m: int = 10,
+    size: int,
+    n: int,
     r: int = 100,
     capacity: float | list[float] | None = None,
     corr=True,
-    rng=None,
+    rng: nGenerator | None = None,
 ) -> list[KnapsackProblem]:
+    """
+    Generates KnapsackProblem instances with the same weights vector.
+
+    Args:
+        size (int, optional): Number of instances.
+        n (int, optional): Number of items.
+        r (int, optional): Range of payoff and weight values. Defaults to 100.
+        capacity (float | list[float] | None, optional): Fractional capacity of instances. Defaults to None.
+        corr (bool, optional): Should weights and payoffs be correlated?. Defaults to True.
+        rng (Generator | None, optional): Random number generator. Defaults to None.
+
+    Returns:
+        list[KnapsackProblem]: KnapsackProblem instances with the same weights vector.
+    """
     if rng is None:
         rng = np.random.default_rng()
 
     problems = []
-    weights = rng.integers(1, r + 1, m)
+    weights = rng.integers(1, r + 1, n)
     weight_sum = weights.sum()
 
     if capacity is None:
@@ -39,7 +54,7 @@ def generate_weight_problems(
         if corr:
             payoffs = rng.integers(lower, upper)
         else:
-            payoffs = rng.integers(1, r + 1, m)
+            payoffs = rng.integers(1, r + 1, n)
         problem = KnapsackProblem(payoffs, weights, capacity[i] * weight_sum)
         problem.solve()
         problems.append(problem)
@@ -49,17 +64,31 @@ def generate_weight_problems(
 
 def generate_payoff_problems(
     size: int,
-    m: int = 10,
+    n: int = 10,
     r: int = 100,
     capacity: float | list[float] | None = None,
     corr=True,
-    rng=None,
+    rng: Generator | None = None,
 ) -> list[KnapsackProblem]:
+    """
+    Generates KnapsackProblem instances with the same payoffs vector.
+
+    Args:
+        size (int): Number of instances
+        n (int, optional): Number of items. Defaults to 10.
+        r (int, optional): Range of payoff and weight values. Defaults to 100.
+        capacity (float | list[float] | None, optional): Fractional capacity of instances. Defaults to None.
+        corr (bool, optional): Should weights and payoffs be correlated?. Defaults to True.
+        rng (Generator | None, optional): Random number generator. Defaults to None.
+
+    Returns:
+        list[KnapsackProblem]: KnapsackProblem instances with the same payoffs vector.
+    """
     if rng is None:
         rng = np.random.default_rng()
 
     problems = []
-    payoffs = rng.integers(1, r + 1, m)
+    payoffs = rng.integers(1, r + 1, n)
 
     if capacity is None:
         capacity: list[float] = list(rng.uniform(0.2, 0.8, size))
@@ -74,7 +103,7 @@ def generate_payoff_problems(
         if corr:
             weights = rng.integers(lower, upper)
         else:
-            weights = rng.integers(1, r + 1, m)
+            weights = rng.integers(1, r + 1, n)
         problem = KnapsackProblem(payoffs, weights, capacity[i] * weights.sum())
         problem.solve()
         problems.append(problem)
@@ -83,12 +112,25 @@ def generate_payoff_problems(
 
 
 def inverse_weights(problems: list[KnapsackProblem], verbose=False) -> np.ndarray:
-    items = problems[0].n_items
+    """
+    Determine the shared weights vector of the problems using inverse optimization.
+
+    Args:
+        problems (list[KnapsackProblem]): KnapsackProblems with the same weights vector.
+        verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
+
+    Raises:
+        ValueError: The problem is infeasible.
+
+    Returns:
+        np.ndarray: The inversed weights vector.
+    """
+    n = problems[0].n
     true_value = [problem.solution @ problem.payoffs for problem in problems]
 
     model = gp.Model("Inverse Knapsack (Weights)")
 
-    w = model.addMVar((items), vtype=GRB.INTEGER, name="w")
+    w = model.addMVar((n), vtype=GRB.INTEGER, name="w")
 
     model.setObjective(w.sum())
 
@@ -139,11 +181,25 @@ def inverse_weights(problems: list[KnapsackProblem], verbose=False) -> np.ndarra
 def inverse_payoffs_direct(
     problems: list[KnapsackProblem], verbose=False
 ) -> np.ndarray:
-    n_items = problems[0].n_items
+    """
+    Determine the shared payoffs vector of the problems using inverse optimization.
+    This method optimises the payoff of the given solutions and adds constraints to the feasible set.
+
+    Args:
+        problems (list[KnapsackProblem]): KnapsackProblems with a shared payoffs vector.
+        verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
+
+    Raises:
+        ValueError: The problem is infeasible.
+
+    Returns:
+        np.ndarray: The inverse payoffs vector.
+    """
+    n = problems[0].n
 
     model = gp.Model("Inverse Knapsack (Payoffs)")
 
-    p = model.addMVar((n_items), vtype=GRB.INTEGER, name="p")
+    p = model.addMVar((n), vtype=GRB.INTEGER, name="p")
 
     model.setObjective(
         gp.quicksum(p @ problem.solution for problem in problems), GRB.MAXIMIZE
@@ -192,13 +248,27 @@ def inverse_payoffs_direct(
 
 
 def inverse_payoffs_delta(problems: list[KnapsackProblem]) -> np.ndarray:
-    n_items = problems[0].n_items
+    """
+    Determine the shared payoffs vector of the problems using inverse optimization.
+    This method uses the delta method which maximises the difference between the
+    objective value of the true solution and candidate alternatives.
+
+    Args:
+        problems (list[KnapsackProblem]): KnapsackProblems with a shared payoffs vector.
+
+    Raises:
+        ValueError: The problem is infeasible.
+
+    Returns:
+        np.ndarray: The inverse payoffs vector.
+    """
+    n = problems[0].n
     n_problems = len(problems)
 
     model = gp.Model("Inverse Knapsack (Payoffs)")
 
     delta = model.addMVar((n_problems), name="delta")
-    p = model.addMVar((n_items), vtype=GRB.INTEGER, name="p")
+    p = model.addMVar((n), vtype=GRB.INTEGER, name="p")
 
     model.setObjective(delta.sum())
 
@@ -246,13 +316,26 @@ def inverse_payoffs_delta(problems: list[KnapsackProblem]) -> np.ndarray:
 
 
 def inverse_payoffs_hybrid(problems: list[KnapsackProblem]) -> np.ndarray:
-    n_items = problems[0].n_items
+    """
+    Determine the shared payoffs vector of the problems using inverse optimization.
+    Combines the approach of inverse_payoffs_direct() and inverse_payoffs_delta().
+
+    Args:
+        problems (list[KnapsackProblem]): KnapsackProblems with a shared payoffs vector.
+
+    Raises:
+        ValueError: The problem is infeasible.
+
+    Returns:
+        np.ndarray: The inverse payoffs vector.
+    """
+    n = problems[0].n
     n_problems = len(problems)
 
     model = gp.Model("Inverse Knapsack (Payoffs)")
 
     delta = model.addMVar((n_problems), name="delta")
-    p = model.addMVar((n_items), vtype=GRB.INTEGER, name="p")
+    p = model.addMVar((n), vtype=GRB.INTEGER, name="p")
 
     model.setObjective(delta.sum())
 

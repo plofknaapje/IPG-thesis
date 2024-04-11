@@ -129,7 +129,7 @@ def generate_payoff_range_problems(
 def inverse_weights(
     problems: list[KnapsackProblem], verbose=False, trim_lower=True
 ) -> tuple[np.ndarray, int]:
-    n_items = problems[0].n_items
+    n_items = problems[0].n
     true_value = [problem.solution @ problem.payoffs for problem in problems]
 
     model = gp.Model("Inverse Knapsack (Weights)")
@@ -187,7 +187,7 @@ def inverse_weights(
 def inverse_payoffs(
     problems: list[KnapsackProblem], verbose=False
 ) -> tuple[np.ndarray, int]:
-    n_items = problems[0].n_items
+    n_items = problems[0].n
     # values = np.arange(1, n_items + 1)
     # proxy_weights = np.linspace(1, 1.01, n_items)
 
@@ -250,7 +250,7 @@ def inverse_payoffs(
 def inverse_delta_payoffs(
     problems: list[KnapsackProblem], verbose=False
 ) -> tuple[np.ndarray, int]:
-    n_items = problems[0].n_items
+    n_items = problems[0].n
 
     model = gp.Model("Inverse Knapsack (Payoffs)")
 
@@ -311,7 +311,7 @@ def inverse_delta_payoffs(
 def inverse_direct_payoffs(
     problems: list[KnapsackProblem], verbose=False
 ) -> tuple[np.ndarray, int]:
-    n_items = problems[0].n_items
+    n_items = problems[0].n
 
     model = gp.Model("Inverse Knapsack (Payoffs)")
 
@@ -357,7 +357,7 @@ def inverse_direct_payoffs(
 def inverse_wang_payoffs(
     problems: list[KnapsackProblem], verbose=False
 ) -> tuple[np.ndarray, int]:
-    n_items = problems[0].n_items
+    n_items = problems[0].n
     base_vector = np.full((n_items), problems[0].payoffs.mean(), dtype=np.short)
 
     model = gp.Model("Inverse Knapsack (Payoffs)")

@@ -3,6 +3,8 @@ from time import time
 import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
+from numpy.random import Generator
+
 
 from problems.knapsack_packing_game import KnapsackPackingGame
 
@@ -13,13 +15,30 @@ def generate_weight_problems(
     size: int,
     n: int,
     m: int,
-    r: int,
+    r: int = 100,
     capacity: float | list[float] | list[list[float]] | None = None,
     corr=True,
     inter_factor=3,
-    rng=None,
+    rng: Generator | None = None,
     verbose=False,
 ) -> list[KnapsackPackingGame]:
+    """
+    Generate KnapsackPackingGame instances with a shared weights matrix.
+
+    Args:
+        size (int): Number of instances.
+        n (int): Number of players.
+        m (int): Number of items.
+        r (int, optional): Range of payoff, weight and interaction values. Defaults to 100.
+        capacity (float | list[float] | list[list[float]] | None, optional): Fractional capacity of instances. Defaults to None.
+        corr (bool, optional): Should weights and payoffs be correlated?. Defaults to True.
+        inter_factor (int, optional): Denominator to limit the influence of interaction. Defaults to 3.
+        rng (Generator | None, optional): Random number generator. Defaults to None.
+        verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
+
+    Returns:
+        list[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
+    """
     if rng is None:
         rng = np.random.default_rng()
 
@@ -58,7 +77,7 @@ def generate_weight_problems(
             weights, payoffs, interactions, list(capacity[len(problems)] * weight_sum)
         )
         problem.solve(verbose)
-        if problem.PNE:
+        if problem is not None:
             problems.append(problem)
 
     return problems
@@ -68,13 +87,30 @@ def generate_payoff_problems(
     size: int,
     n: int,
     m: int,
-    r: int,
+    r: int = 100,
     capacity: float | list[float] | list[list[float]] | None = None,
     corr=True,
     inter_factor=3,
     rng=None,
     verbose=False,
 ) -> list[KnapsackPackingGame]:
+    """
+    Generate KnapsackPackingGame instances with a shared weights matrix.
+
+    Args:
+        size (int): Number of instances.
+        n (int): Number of players.
+        m (int): Number of items.
+        r (int, optional): Range of payoff, weight and interaction values. Defaults to 100.
+        capacity (float | list[float] | list[list[float]] | None, optional): Fractional capacity of instances. Defaults to None.
+        corr (bool, optional): Should weights and payoffs be correlated?. Defaults to True.
+        inter_factor (int, optional): Denominator to limit the influence of interaction. Defaults to 3.
+        rng (Generator | None, optional): Random number generator. Defaults to None.
+        verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
+
+    Returns:
+        list[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
+    """
     if rng is None:
         rng = np.random.default_rng()
 
@@ -115,13 +151,26 @@ def generate_payoff_problems(
             list(capacity[len(problems)] * weights.sum(axis=1)),
         )
         problem.solve(verbose)
-        if problem.PNE:
+        if problem is not None:
             problems.append(problem)
 
     return problems
 
 
 def inverse_weights(problems: list[KnapsackPackingGame], verbose=False) -> np.ndarray:
+    """
+    Determine the shared weights matrix of the problems using inverse optimization.
+
+    Args:
+        problems (list[KnapsackPackingGame]): KnapsackPackingGames with the same weights matrix.
+        verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
+
+    Raises:
+        ValueError: Problem is infeasible.
+
+    Returns:
+        np.ndarray: The inversed weights matrix.
+    """
     n = problems[0].n
     players = problems[0].players
     m = problems[0].m
@@ -184,8 +233,20 @@ def inverse_weights(problems: list[KnapsackPackingGame], verbose=False) -> np.nd
 
 
 def inverse_payoffs(problems: list[KnapsackPackingGame], verbose=False) -> np.ndarray:
-    # Uses the hybrid delta-value method
+    """
+    Determine the shared payoffs matrix of the problems using inverse optimization.
+    Combines the delta and direct method.
 
+    Args:
+        problems (list[KnapsackPackingGame]): KnapsackPackingGames with the same payoffs matrix.
+        verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
+
+    Raises:
+        ValueError: Problem is infeasible.
+
+    Returns:
+        np.ndarray: The inversed payoffs matrix.
+    """
     n_problems = len(problems)
     n = problems[0].n
     players = problems[0].players

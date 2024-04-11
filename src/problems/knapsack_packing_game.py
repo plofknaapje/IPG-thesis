@@ -20,11 +20,12 @@ class KnapsackPackingGame:
     players: list[int]  # list of player indices, length n
     pairs: list[list[int]]  # list of all possible pairs of players
     opps: list[list[int]]  # opponents of each player
-    capacity: list[float]  # carrying capacity of each player, length n
-    weights: np.ndarray  # weights of the items, size (n, m)
-    payoffs: np.ndarray  # payoffs of the items, size (n, m)
-    # interaction payoff of the items (n, n, m) with 0 on diagonals
-    inter_coefs: np.ndarray
+    capacity: list[int]  # capacity of each player, length n
+    weights: np.ndarray  # weights of the items, (n, m)
+    payoffs: np.ndarray  # payoffs of the items, (n, m)
+    inter_coefs: (
+        np.ndarray
+    )  # interaction payoff of the items (n, n, m) with 0 on diagonals
     solution: np.ndarray | None
 
     def __init__(
@@ -41,10 +42,11 @@ class KnapsackPackingGame:
         self.players = list(range(self.n))
         self.pairs = list(itertools.permutations(self.players, 2))
         self.opps = [[o for p, o in self.pairs if p == j] for j in self.players]
-        self.capacity = [round(cap, 2) for cap in capacity]
+        self.capacity = [int(cap) for cap in capacity]
         self.solution = None
 
     def print_data(self):
+        # Prints the payoffs, weights and interaction coefficients of the KPG.
         print("Payoffs")
         print(self.payoffs)
         print("Weights")
@@ -53,6 +55,20 @@ class KnapsackPackingGame:
         print(self.inter_coefs)
 
     def solve_player_weights(self, weights: np.ndarray, player: int) -> np.ndarray:
+        """
+        Solves the KPG from the perspective of one player given the solutions of
+        other players using a given set of weights.
+
+        Args:
+            weights (np.ndarray): new weights.
+            player (int): index of the player.
+
+        Raises:
+            ValueError: if the problem is infeasible.
+
+        Returns:
+            np.ndarray: optimal solution to the problem.
+        """
         model = gp.Model("Knapsack Problem")
 
         x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
@@ -80,6 +96,20 @@ class KnapsackPackingGame:
         return result
 
     def solve_player_payoffs(self, payoffs: np.ndarray, player: int) -> np.ndarray:
+        """
+        Solves the KPG from the perspective of one player given the solutions of
+        other players using a given set of payoffs.
+
+        Args:
+            payoffs (np.ndarray): new payoffs.
+            player (int): index of the player.
+
+        Raises:
+            ValueError: if the problem is infeasible.
+
+        Returns:
+            np.ndarray: optimal solution to the problem.
+        """
         model = gp.Model("Knapsack Problem")
 
         x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
@@ -106,17 +136,40 @@ class KnapsackPackingGame:
 
         return result
 
-    def solve(self, verbose=False) -> np.ndarray:
+    def solve(self, verbose=False) -> np.ndarray | None:
+        """
+        Solve the KPG using zero_regrets(). Sets self.solution if this was None.
+        Also changes self.PNE. If self.PNE is True, then the solution is an equilibrium.
+        If self.PNE is False, the KPG has no pure stable solution.
+
+        Args:
+            verbose (bool, optional): Transfered to zero_regrets(verbose). Defaults to False.
+
+        Returns:
+            np.ndarray | None: optimal solution for all players if that was found. None otherwise.
+        """
         if self.solution is not None:
             print("Already solved")
             return self.solution
 
         result = zero_regrets(self, verbose)
-        self.solution = result.X
-        self.PNE = result.PNE
-        return self.solution
+        if result.PNE:
+            self.solution = result.X
+            return self.solution
+        else:
+            return None
 
     def obj_value(self, player: int, solution: np.ndarray) -> int | float:
+        """
+        Calculates the objective value for a player based on a given solution.
+
+        Args:
+            player (int): index of the player.
+            solution (np.ndarray): solution matrix.
+
+        Returns:
+            int | float: objective value of player under the given solution.
+        """
         value = solution[player] @ self.payoffs[player]
 
         for opp in self.opps[player]:
@@ -124,7 +177,20 @@ class KnapsackPackingGame:
 
         return value
 
-    def solved_obj_value(self, player: int, player_sol=None) -> int | float:
+    def solved_obj_value(
+        self, player: int, player_sol: np.ndarray | None = None
+    ) -> int | float:
+        """
+        Calculates the objetive value of player. If a player_sol is given, it is
+        used for the player instead of self.solution.
+
+        Args:
+            player (int): _description_
+            player_sol (np.ndarray | None, optional): Solution of the player. Defaults to None.
+
+        Returns:
+            int | float: _description_
+        """
         if player_sol is None:
             value = self.solution[player] @ self.payoffs[player]
 

@@ -1,5 +1,17 @@
-from methods.local_inverse_kp import generate_problem
+import numpy as np
 
-problem = generate_problem(20, capacity=0.5)
+from methods.local_inverse_kp import (
+    generate_problem,
+    local_inverse_payoffs,
+    local_inverse_weights,
+)
 
-print(problem.solve_greedy())
+problem = generate_problem(50, capacity=0.5)
+
+greedy_solution = problem.solve_greedy()
+
+payoffs = local_inverse_payoffs(problem)
+print("Payoffs change:", np.abs(problem.payoffs - payoffs).sum())
+
+weights = local_inverse_weights(problem)
+print("Weights change:", np.abs(problem.weights - weights).sum())
