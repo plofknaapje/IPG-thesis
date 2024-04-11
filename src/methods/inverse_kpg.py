@@ -175,7 +175,7 @@ def inverse_weights(problems: list[KnapsackPackingGame], verbose=False) -> np.nd
     players = problems[0].players
     m = problems[0].m
     true_value = {
-        (i, player): problem.solved_obj_value(player)
+        (i, player): problem.obj_value(player)
         for i, problem in enumerate(problems)
         for player in players
     }
@@ -204,7 +204,7 @@ def inverse_weights(problems: list[KnapsackPackingGame], verbose=False) -> np.nd
         for i, problem in enumerate(problems):
             for j in players:
                 new_solution = problem.solve_player_weights(w.X, j)
-                new_value = problem.solved_obj_value(j, new_solution)
+                new_value = problem.obj_value(j, player_solution=new_solution)
 
                 if new_value >= true_value[i, j] + eps:
                     model.addConstr(new_solution @ w[j] >= problem.capacity[j] + eps)

@@ -76,6 +76,34 @@ class KnapsackPackingGame:
             return self.solution
         else:
             return None
+        
+    def solve_player(self, player: int, solution: np.ndarray) -> np.ndarray:
+        model = gp.Model("KPG player")
+
+        x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
+
+        model.setObjective(
+            x @ self.payoffs[player] 
+            + gp.quicksum(
+                x * solution[opp] @ self.inter_coefs[player, opp]
+                for opp in self.opps[player]
+            ),
+            GRB.MAXIMIZE,
+        )
+
+        model.addConstr(x @ self.weights[player] <= self.capacity[player])
+
+        model.optimize()
+
+        if model.Status == GRB.INFEASIBLE:
+            raise ValueError("Problem is Infeasible!")
+
+        result = x.X
+
+        model.close()
+
+        return result
+
 
     def solve_player_weights(self, weights: np.ndarray, player: int, solution: np.ndarray | None = None) -> np.ndarray:
         """
@@ -96,7 +124,7 @@ class KnapsackPackingGame:
         if solution is None:
             solution = self.solution
 
-        model = gp.Model("Knapsack Problem")
+        model = gp.Model("KPG player weights")
 
         x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
 
@@ -141,7 +169,7 @@ class KnapsackPackingGame:
         if solution is None:
             solution = self.solution
 
-        model = gp.Model("Knapsack Problem")
+        model = gp.Model("KPG player payoffs")
 
         x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
 
@@ -167,52 +195,36 @@ class KnapsackPackingGame:
 
         return result
 
-    def obj_value(self, player: int, solution: np.ndarray) -> int:
+    def obj_value(self, player: int, solution: np.ndarray | None = None, player_solution: np.ndarray | None = None) -> int:
         """
         Calculates the objective value for a player based on a given solution.
+        If player_solution is not None, its used for the player.
+        If solution is not None, it is used instead of self.solution.
 
         Args:
-            player (int): index of the player.
-            solution (np.ndarray): solution matrix.
+            player (int): Index of the player.
+            solution (np.ndarray | None, optional): Solution matrix. Defaults to None.
+            player_solution (np.ndarray | None, optional): Player solution vector. Defaults to None.
 
         Returns:
-            int | float: objective value of player under the given solution.
+            int: Objective value of player under the given solution.
         """
-        value = solution[player] @ self.payoffs[player]
+        if player_solution is not None:
+            player_sol = player_solution
+        elif solution is not None:
+            player_sol = solution[player]
+        else:
+            player_sol = self.solution[player]
+        
+        if solution is not None:
+            others_sol = solution
+        else:
+            others_sol = self.solution
+
+        value = player_sol @ self.payoffs[player]
 
         for opp in self.opps[player]:
-            value += solution[player] * solution[opp] @ self.inter_coefs[player, opp]
-
-        return value
-
-    def solved_obj_value(
-        self, player: int, player_sol: np.ndarray | None = None
-    ) -> int | float:
-        """
-        Calculates the objetive value of player. If a player_sol is given, it is
-        used for the player instead of self.solution.
-
-        Args:
-            player (int): _description_
-            player_sol (np.ndarray | None, optional): Solution of the player. Defaults to None.
-
-        Returns:
-            int | float: _description_
-        """
-        if player_sol is None:
-            value = self.solution[player] @ self.payoffs[player]
-
-            for opp in self.opps[player]:
-                value += (
-                    self.solution[player]
-                    * self.solution[opp]
-                    @ self.inter_coefs[player, opp]
-                )
-        else:
-            value = player_sol @ self.payoffs[player]
-
-            for opp in self.opps[player]:
-                value += player_sol * self.solution[opp] @ self.inter_coefs[player, opp]
+            value += player_sol * others_sol[opp] @ self.inter_coefs[player, opp]
 
         return value
 
@@ -402,7 +414,7 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
     # TODO: extend for higher n.
     start = time.time()
 
-    oracles = {p: create_player_oracle(kpg, p) for p in kpg.players}
+    # oracles = {p: create_player_oracle(kpg, p) for p in kpg.players}
 
     pm = gp.Model("ZeroRegrets")
     x = pm.addMVar((kpg.n, kpg.m), vtype=GRB.BINARY, name="x")
@@ -497,13 +509,14 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
                 kpg.inter_coefs[p, p2, :] @ current_z[p, p2, :] for p2 in kpg.opps[p]
             )
 
-            new_x, new_obj = oracle_optimization(oracles[p], kpg, current_x, p)
+            new_x = kpg.solve_player(p, current_x)
+            new_obj = kpg.obj_value(p, solution=current_x, player_solution=new_x)
             if new_obj >= obj + eps:
                 # Add constraint!
                 pm.addConstr(
-                    kpg.payoffs[p, :] @ new_x[p, :]
+                    kpg.payoffs[p, :] @ new_x
                     + gp.quicksum(
-                        kpg.inter_coefs[p, p2, j] * new_x[p, j] * x[p2, j]
+                        kpg.inter_coefs[p, p2, j] * new_x[j] * x[p2, j]
                         for j in range(kpg.m)
                         for p2 in kpg.opps[p]
                     )
@@ -539,9 +552,6 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
     objective = pm.ObjVal
 
     pm.close()
-
-    for p in kpg.players:
-        oracles[p][0].close()
 
     return KPGResult(True, result, objective, runtime)
 
