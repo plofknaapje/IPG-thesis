@@ -54,7 +54,30 @@ class KnapsackPackingGame:
         print("Interaction coefficients")
         print(self.inter_coefs)
 
-    def solve_player_weights(self, weights: np.ndarray, player: int, solution = np.ndarray | None = None) -> np.ndarray:
+    def solve(self, verbose=False) -> np.ndarray | None:
+        """
+        Solve the KPG using zero_regrets(). Sets self.solution if this was None.
+        Also changes self.PNE. If self.PNE is True, then the solution is an equilibrium.
+        If self.PNE is False, the KPG has no pure stable solution.
+
+        Args:
+            verbose (bool, optional): Transfered to zero_regrets(verbose). Defaults to False.
+
+        Returns:
+            np.ndarray | None: optimal solution for all players if that was found. None otherwise.
+        """
+        if self.solution is not None:
+            print("Already solved")
+            return self.solution
+
+        result = zero_regrets(self, verbose)
+        if result.PNE:
+            self.solution = result.X
+            return self.solution
+        else:
+            return None
+
+    def solve_player_weights(self, weights: np.ndarray, player: int, solution: np.ndarray | None = None) -> np.ndarray:
         """
         Solves the KPG from the perspective of one player given the solutions of
         other players using a given set of weights.
@@ -143,29 +166,6 @@ class KnapsackPackingGame:
         model.close()
 
         return result
-
-    def solve(self, verbose=False) -> np.ndarray | None:
-        """
-        Solve the KPG using zero_regrets(). Sets self.solution if this was None.
-        Also changes self.PNE. If self.PNE is True, then the solution is an equilibrium.
-        If self.PNE is False, the KPG has no pure stable solution.
-
-        Args:
-            verbose (bool, optional): Transfered to zero_regrets(verbose). Defaults to False.
-
-        Returns:
-            np.ndarray | None: optimal solution for all players if that was found. None otherwise.
-        """
-        if self.solution is not None:
-            print("Already solved")
-            return self.solution
-
-        result = zero_regrets(self, verbose)
-        if result.PNE:
-            self.solution = result.X
-            return self.solution
-        else:
-            return None
 
     def obj_value(self, player: int, solution: np.ndarray) -> int:
         """
