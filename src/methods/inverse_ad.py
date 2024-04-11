@@ -1,1 +1,1 @@
-from problems.attacker_defender import AttackerDefenderGame
+from problems.attacker_defender_game import AttackerDefenderGame

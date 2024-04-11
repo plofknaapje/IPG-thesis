@@ -159,7 +159,7 @@ class KnapsackPackingGame:
         else:
             return None
 
-    def obj_value(self, player: int, solution: np.ndarray) -> int | float:
+    def obj_value(self, player: int, solution: np.ndarray) -> int:
         """
         Calculates the objective value for a player based on a given solution.
 
@@ -380,7 +380,8 @@ def oracle_optimization(
 
 
 def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
-    """Optimises kpg using the ZeroRegrets methods of cutting.
+    """
+    Solves kpg using the ZeroRegrets methods of cutting.
 
     Args:
         kpg (KPG): KPG problem.
