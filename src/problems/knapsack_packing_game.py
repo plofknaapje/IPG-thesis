@@ -35,6 +35,15 @@ class KnapsackPackingGame:
         inter_coefs: np.ndarray,
         capacity: list[float],
     ):
+        """
+        Create a new instance of the KnapsackPackingGame
+
+        Args:
+            weights (np.ndarray): Weights matrix.
+            payoffs (np.ndarray): Payoffs matrix.
+            inter_coefs (np.ndarray): Interaction matrix.
+            capacity (list[float]): Fractional capacity per player.
+        """        
         self.n, self.m = weights.shape
         self.weights = weights
         self.payoffs = payoffs
@@ -76,14 +85,14 @@ class KnapsackPackingGame:
             return self.solution
         else:
             return None
-        
+
     def solve_player(self, player: int, solution: np.ndarray) -> np.ndarray:
         model = gp.Model("KPG player")
 
         x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
 
         model.setObjective(
-            x @ self.payoffs[player] 
+            x @ self.payoffs[player]
             + gp.quicksum(
                 x * solution[opp] @ self.inter_coefs[player, opp]
                 for opp in self.opps[player]
@@ -104,8 +113,9 @@ class KnapsackPackingGame:
 
         return result
 
-
-    def solve_player_weights(self, weights: np.ndarray, player: int, solution: np.ndarray | None = None) -> np.ndarray:
+    def solve_player_weights(
+        self, weights: np.ndarray, player: int, solution: np.ndarray | None = None
+    ) -> np.ndarray:
         """
         Solves the KPG from the perspective of one player given the solutions of
         other players using a given set of weights.
@@ -150,7 +160,9 @@ class KnapsackPackingGame:
 
         return result
 
-    def solve_player_payoffs(self, payoffs: np.ndarray, player: int, solution: np.ndarray | None = None) -> np.ndarray:
+    def solve_player_payoffs(
+        self, payoffs: np.ndarray, player: int, solution: np.ndarray | None = None
+    ) -> np.ndarray:
         """
         Solves the KPG from the perspective of one player given the solutions of
         other players using a given set of payoffs.
@@ -195,7 +207,12 @@ class KnapsackPackingGame:
 
         return result
 
-    def obj_value(self, player: int, solution: np.ndarray | None = None, player_solution: np.ndarray | None = None) -> int:
+    def obj_value(
+        self,
+        player: int,
+        solution: np.ndarray | None = None,
+        player_solution: np.ndarray | None = None,
+    ) -> int:
         """
         Calculates the objective value for a player based on a given solution.
         If player_solution is not None, its used for the player.
@@ -215,7 +232,7 @@ class KnapsackPackingGame:
             player_sol = solution[player]
         else:
             player_sol = self.solution[player]
-        
+
         if solution is not None:
             others_sol = solution
         else:
@@ -325,80 +342,6 @@ def read_file(file: str) -> KnapsackPackingGame:
     return kpg
 
 
-def create_player_oracle(
-    kpg: KnapsackPackingGame, player: int
-) -> tuple[gp.Model, gp.MVar, gp.MVar]:
-    m = gp.Model(f"LocalKPG[{player}]")
-    x = m.addMVar((kpg.n, kpg.m), vtype=GRB.BINARY, name="x")
-    z = m.addMVar((kpg.n, kpg.n, kpg.m), vtype=GRB.BINARY, name="z")
-
-    m.setObjective(
-        kpg.payoffs[player, :] @ x[player, :]
-        + gp.quicksum(
-            kpg.inter_coefs[player, opp, :] @ z[player, opp, :]
-            for opp in kpg.opps[player]
-        ),
-        GRB.MAXIMIZE,
-    )
-
-    for p in kpg.players:
-        # Capacity constraint
-        m.addConstr(kpg.weights[p, :] @ x[p, :] <= kpg.capacity[p])
-
-    for p1, p2 in kpg.pairs:
-        for j in range(kpg.m):
-            if p1 > p2:
-                # z value symmetry
-                m.addConstr(z[p1, p2, j] == z[p2, p1, j])
-                continue
-            # z value constraints
-            m.addConstr(z[p1, p2, j] <= x[p1, j])
-            m.addConstr(z[p1, p2, j] <= x[p2, j])
-            m.addConstr(z[p1, p2, j] >= x[p1, j] + x[p2, j] - 1)
-
-    return (m, x, z)
-
-
-def oracle_optimization(
-    oracle: tuple, kpg: KnapsackPackingGame, point_x: np.ndarray, p: int, verbose=False
-) -> tuple[np.ndarray, int]:
-    """Detect local suboptimal solutions
-    Function checks if a solution is suboptimal for player p and returns a local improvement if possible.
-
-    Args:
-        kpg (KPG): KPG problem.
-        point_x (np.ndarray): point to check.
-        p (int): index of player to check.
-        verbose (bool, optional): enable verbose output. Defaults to False.
-
-    Raises:
-        ValueError: If problem is infeasible, but then there is a problem higher up!
-
-    Returns:
-        tuple[np.ndarray, int]: new matrix x as well as new player objective.
-    """
-    m, x, _ = oracle
-    for o in kpg.players:
-        # Fix actions of other players
-        if o != p:
-            for j in range(kpg.m):
-                x[o, j].lb = point_x[o, j]
-                x[o, j].ub = point_x[o, j]
-
-    m.optimize()
-
-    if verbose:
-        for v in m.getVars():
-            print(f"{v.VarName} {v.X:g}")
-
-        print(f"Obj: {m.ObjVal:g}")
-
-    if m.Status == GRB.INFEASIBLE:
-        raise ValueError("Problem is Infeasible! This is not possible!")
-
-    return x.X, m.ObjVal
-
-
 def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
     """
     Solves kpg using the ZeroRegrets methods of cutting.
@@ -414,13 +357,11 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
     # TODO: extend for higher n.
     start = time.time()
 
-    # oracles = {p: create_player_oracle(kpg, p) for p in kpg.players}
+    model = gp.Model("ZeroRegrets KPG")
+    x = model.addMVar((kpg.n, kpg.m), vtype=GRB.BINARY, name="x")
+    z = model.addMVar((kpg.n, kpg.n, kpg.m), vtype=GRB.BINARY, name="z")
 
-    pm = gp.Model("ZeroRegrets")
-    x = pm.addMVar((kpg.n, kpg.m), vtype=GRB.BINARY, name="x")
-    z = pm.addMVar((kpg.n, kpg.n, kpg.m), vtype=GRB.BINARY, name="z")
-
-    pm.setObjective(
+    model.setObjective(
         gp.quicksum(x[p, :] @ kpg.payoffs[p, :] for p in kpg.players)
         + gp.quicksum(
             kpg.inter_coefs[p1, p2, :] @ z[p1, p2, :] for p1, p2 in kpg.pairs
@@ -430,16 +371,16 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
 
     for p in kpg.players:
         # Capacity constraint
-        pm.addConstr(kpg.weights[p, :] @ x[p, :] <= kpg.capacity[p])
+        model.addConstr(kpg.weights[p, :] @ x[p, :] <= kpg.capacity[p])
 
     for p1, p2 in kpg.pairs:
         for j in range(kpg.m):
             if p1 > p2:
-                pm.addConstr(z[p1, p2, j] == z[p2, p1, j])
+                model.addConstr(z[p1, p2, j] == z[p2, p1, j])
                 continue
-            pm.addConstr(z[p1, p2, j] <= x[p1, j])
-            pm.addConstr(z[p1, p2, j] <= x[p2, j])
-            pm.addConstr(z[p1, p2, j] >= x[p1, j] + x[p2, j] - 1)
+            model.addConstr(z[p1, p2, j] <= x[p1, j])
+            model.addConstr(z[p1, p2, j] <= x[p2, j])
+            model.addConstr(z[p1, p2, j] >= x[p1, j] + x[p2, j] - 1)
 
     # If the highest possible value of an item k is lower than the lowest possible
     # value of an item j, then item j dominates item k.
@@ -459,23 +400,23 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
                     for ops in opponent_sets
                 )
                 if j_min >= k_max + eps:
-                    pm.addConstr(x[p, k] <= x[p, j])
+                    model.addConstr(x[p, k] <= x[p, j])
                     dominance += 1
+
+    model.optimize()
+
+    if model.Status == GRB.INFEASIBLE:
+        print("IPG is not feasible (anymore)!")
+
     if verbose:
         print("====")
     cuts = 0
     unequal_payoff = 0
     while True:
-        pm.optimize()
-
-        if pm.Status == GRB.INFEASIBLE:
-            print("IPG is not feasible (anymore)!")
-            break
-
+        new_constraint = False
         current_x = x.X
         current_z = z.X
-        current_obj = pm.ObjVal
-        finished = True
+        current_obj = model.ObjVal
         if verbose:
             print(f"Current total is {current_obj}")
 
@@ -497,7 +438,7 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
                 opponent_set = [
                     o for o in range(kpg.n) if o != p and kpg.inter_coefs[p, o, j] < 0
                 ]
-                pm.addConstr(
+                model.addConstr(
                     x[p, j] + gp.quicksum(x[o, j] for o in opponent_set)
                     <= len(opponent_set)
                 )
@@ -513,7 +454,7 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
             new_obj = kpg.obj_value(p, solution=current_x, player_solution=new_x)
             if new_obj >= obj + eps:
                 # Add constraint!
-                pm.addConstr(
+                model.addConstr(
                     kpg.payoffs[p, :] @ new_x
                     + gp.quicksum(
                         kpg.inter_coefs[p, p2, j] * new_x[j] * x[p2, j]
@@ -528,9 +469,15 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
                     )
                 )
                 cuts += 1
-                finished = False
+                new_constraint = True
 
-        if finished:
+        if not new_constraint:
+            break
+
+        model.optimize()
+
+        if model.Status == GRB.INFEASIBLE:
+            print("IPG is not feasible (anymore)!")
             break
 
     runtime = round(time.time() - start, 1)
@@ -541,17 +488,17 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
         print(f"Added {cuts} cuts.")
         print(f"Added {unequal_payoff} unequal payoff constraints.")
 
-    if pm.Status == GRB.INFEASIBLE:
+    if model.Status == GRB.INFEASIBLE:
         print(f"Reached INFEASIBLE with {current_obj} in {runtime} seconds")
         return KPGResult(False, current_x, current_obj, runtime)
 
     if verbose:
-        print(f"{pm.ObjVal} in {runtime} seconds")
+        print(f"{model.ObjVal} in {runtime} seconds")
 
     result = x.X
-    objective = pm.ObjVal
+    objective = model.ObjVal
 
-    pm.close()
+    model.close()
 
     return KPGResult(True, result, objective, runtime)
 
