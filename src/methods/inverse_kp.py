@@ -1,5 +1,3 @@
-from time import time
-
 import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
@@ -16,7 +14,7 @@ def generate_weight_problems(
     r: int = 100,
     capacity: float | list[float] | None = None,
     corr=True,
-    rng: nGenerator | None = None,
+    rng: Generator | None = None,
 ) -> list[KnapsackProblem]:
     """
     Generates KnapsackProblem instances with the same weights vector.
@@ -247,7 +245,7 @@ def inverse_payoffs_direct(
     return inverse.astype(int)
 
 
-def inverse_payoffs_delta(problems: list[KnapsackProblem]) -> np.ndarray:
+def inverse_payoffs_delta(problems: list[KnapsackProblem], verbose=False) -> np.ndarray:
     """
     Determine the shared payoffs vector of the problems using inverse optimization.
     This method uses the delta method which maximises the difference between the
@@ -255,6 +253,7 @@ def inverse_payoffs_delta(problems: list[KnapsackProblem]) -> np.ndarray:
 
     Args:
         problems (list[KnapsackProblem]): KnapsackProblems with a shared payoffs vector.
+        verbose (bool, Optional): Report progress. Defaults to False.
 
     Raises:
         ValueError: The problem is infeasible.
@@ -315,13 +314,16 @@ def inverse_payoffs_delta(problems: list[KnapsackProblem]) -> np.ndarray:
     return inverse.astype(int)
 
 
-def inverse_payoffs_hybrid(problems: list[KnapsackProblem]) -> np.ndarray:
+def inverse_payoffs_hybrid(
+    problems: list[KnapsackProblem], verbose=False
+) -> np.ndarray:
     """
     Determine the shared payoffs vector of the problems using inverse optimization.
     Combines the approach of inverse_payoffs_direct() and inverse_payoffs_delta().
 
     Args:
         problems (list[KnapsackProblem]): KnapsackProblems with a shared payoffs vector.
+        verbose (bool, Optional): Report progress. Defaults to False.
 
     Raises:
         ValueError: The problem is infeasible.

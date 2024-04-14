@@ -43,7 +43,7 @@ class KnapsackPackingGame:
             payoffs (np.ndarray): Payoffs matrix.
             inter_coefs (np.ndarray): Interaction matrix.
             capacity (list[float]): Fractional capacity per player.
-        """        
+        """
         self.n, self.m = weights.shape
         self.weights = weights
         self.payoffs = payoffs

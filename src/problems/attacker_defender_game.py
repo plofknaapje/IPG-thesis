@@ -42,7 +42,7 @@ class AttackerDefenderGame:
             success (float | None, optional): Reward for a successful attack. Defaults to None.
             normal (float | None, optional): Attacker opportunity cost. Defaults to None.
             rng (Generator | None, optional): Random number generator. Defaults to None.
-        """         
+        """
         if rng is None:
             rng = np.random.default_rng()
 
@@ -81,7 +81,7 @@ class AttackerDefenderGame:
 
         Returns:
             np.ndarray | None: Solution or None if the result is not a PNE.
-        """        
+        """
         if self.solution is not None:
             print("Problem was already solved")
             return self.solution
@@ -105,12 +105,12 @@ class AttackerDefenderGame:
             ValueError: Problem is infeasible.
         Returns:
             np.ndarray: Optimal solution for the player.
-        """        
+        """
         model = gp.Model("ADG player")
 
         x = model.addMVar((self.n), vtype=GRB.BINARY, name="x")
 
-        if defender: 
+        if defender:
             opp_sol = current_sol[1]
             model.setObjective(
                 self.payoffs[0]
@@ -124,7 +124,7 @@ class AttackerDefenderGame:
             )
 
             model.addConstr(self.weights[0] @ x <= self.capacity[0])
-        else: 
+        else:
             opp_sol = current_sol[0]
             model.setObjective(
                 self.payoffs[1]
@@ -164,7 +164,7 @@ class AttackerDefenderGame:
 
         Returns:
             float: Objective function value for the selected player.
-        """        
+        """
         if def_sol is None:
             defender = self.solution[0]
         else:
@@ -216,7 +216,7 @@ def generate_random_ADG(
 
     Returns:
         AttackerDefenderGame: ADG instance.
-    """    
+    """
     if rng is None:
         rng = np.random.default_rng()
 
@@ -239,7 +239,7 @@ def zero_regrets(adg: AttackerDefenderGame, verbose=False) -> ADGResult:
 
     Returns:
         ADGResult: Results of the zero_regrets process.
-    """    
+    """
     start = time()
     i_range = list(range(adg.n))
     theta_ub = 0
