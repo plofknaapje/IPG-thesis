@@ -12,6 +12,17 @@ eps = 0.001
 
 
 @dataclass
+class KPGResult:
+    # Class for storing result of solving KPG instance
+    PNE: bool
+    X: np.ndarray
+    ObjVal: int
+    runtime: float
+    phi: float
+    timelimit_reached: bool = False
+
+
+@dataclass
 class KnapsackPackingGame:
     # Class for storing binary Knapsack Packing Games.
 
@@ -27,6 +38,7 @@ class KnapsackPackingGame:
         np.ndarray
     )  # interaction payoff of the items (n, n, m) with 0 on diagonals
     solution: np.ndarray | None
+    result: KPGResult | None
 
     def __init__(
         self,
@@ -53,6 +65,7 @@ class KnapsackPackingGame:
         self.opps = [[o for p, o in self.pairs if p == j] for j in self.players]
         self.capacity = [int(cap) for cap in capacity]
         self.solution = None
+        self.result = None
 
     def print_data(self):
         # Prints the payoffs, weights and interaction coefficients of the KPG.
@@ -63,7 +76,7 @@ class KnapsackPackingGame:
         print("Interaction coefficients")
         print(self.inter_coefs)
 
-    def solve(self, allow_phi_ne=False, verbose=False) -> np.ndarray | None:
+    def solve(self, verbose=False, timelimit: int | None = None) -> KPGResult:
         """
         Solve the KPG using zero_regrets(). Sets self.solution if this was None.
         Also changes self.PNE. If self.PNE is True, then the solution is an equilibrium.
@@ -78,18 +91,11 @@ class KnapsackPackingGame:
         """
         if self.solution is not None:
             print("Already solved")
-            return self.solution
+            return self.result
 
-        result = zero_regrets(self, verbose)
-
-        if allow_phi_ne:
-            self.solution = result.X
-            return self.solution
-        elif result.PNE:
-            self.solution = result.X
-            return self.solution
-        else:
-            return None
+        self.result = zero_regrets(self, verbose, timelimit)
+        self.solution = self.result.X
+        return self.result
 
     def solve_player(self, player: int, solution: np.ndarray) -> np.ndarray:
         model = gp.Model("KPG player")
@@ -251,16 +257,6 @@ class KnapsackPackingGame:
         return value
 
 
-@dataclass
-class KPGResult:
-    # Class for storing result of solving KPG instance
-    PNE: bool
-    X: np.ndarray
-    ObjVal: int
-    runtime: float
-    phi: float
-
-
 def generate_random_KPG(
     n=2,
     m=25,
@@ -348,13 +344,16 @@ def read_file(file: str) -> KnapsackPackingGame:
     return kpg
 
 
-def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
+def zero_regrets(
+    kpg: KnapsackPackingGame, verbose=False, timelimit: int | None = None
+) -> KPGResult:
     """
     Solves kpg using the ZeroRegrets methods of cutting.
 
     Args:
         kpg (KPG): KPG problem.
         verbose (bool, optional): Print progress?. Defaults to False.
+        timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
 
     Returns:
         KPGResult: result of solving the KPG problem.
@@ -493,7 +492,15 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
             phi.ub = phi_ub
             model.optimize()
 
-    runtime = time() - start
+        if timelimit is None:
+            continue
+        elif time() - start >= timelimit:
+            pne = False
+            result = x.X
+            objval = model.ObjVal
+            phi = phi.X
+            model.close()
+            return KPGResult(pne, result, objval, time() - start, phi, True)
 
     if verbose:
         print("====")
@@ -502,12 +509,12 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
         print(f"Added {unequal_payoff} unequal payoff constraints.")
 
     if verbose:
-        print(f"{model.ObjVal} in {runtime} seconds")
+        print(f"{model.ObjVal} in {time() - start} seconds")
 
     if phi.X >= 1:
         pne = False
-        result = current_x
-        objval = current_obj
+        result = x.X
+        objval = model.ObjVal
         phi = phi.X
     else:
         pne = True
@@ -517,7 +524,7 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
 
     model.close()
 
-    return KPGResult(pne, result, objval, runtime, phi)
+    return KPGResult(pne, result, objval, time() - start, phi)
 
 
 if __name__ == "__main__":

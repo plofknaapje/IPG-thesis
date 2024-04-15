@@ -8,6 +8,16 @@ from numpy.random import Generator
 
 
 @dataclass
+class ADGResult:
+    PNE: bool
+    X: np.ndarray
+    ObjVal: float
+    runtime: float
+    phi: float
+    timelimit_reached: bool = False
+
+
+@dataclass
 class AttackerDefenderGame:
     n: int  # number of targets
     weights: np.ndarray  # costs for defender and attacker (2, n)
@@ -18,6 +28,7 @@ class AttackerDefenderGame:
     success: float  # attack cost of defender. delta < eta.
     normal: float  # opportunit cost of defender.
     solution: np.ndarray | None
+    result: ADGResult | Noe
 
     def __init__(
         self,
@@ -71,27 +82,26 @@ class AttackerDefenderGame:
             self.normal = normal
 
         self.solution = None
+        self.result = None
 
-    def solve(self, verbose=False) -> np.ndarray | None:
+    def solve(self, verbose=False, timelimit: int | None = None) -> ADGResult:
         """
         Solve self with the zero_regrets algorithm. Updates self.solution/
 
         Args:
             verbose (bool, optional): Verbose progress reports. Defaults to False.
+            timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
 
         Returns:
             np.ndarray | None: Solution or None if the result is not a PNE.
         """
         if self.solution is not None:
             print("Problem was already solved")
-            return self.solution
+            return self.result
 
-        result = zero_regrets(self, verbose)
-        if result.PNE:
-            self.solution = result.X
-            return result.X
-        else:
-            return None
+        self.result = zero_regrets(self, verbose, timelimit)
+        self.solution = self.result.X
+        return self.result
 
     def solve_player(self, defender: bool, current_sol: np.ndarray) -> np.ndarray:
         """
@@ -190,15 +200,6 @@ class AttackerDefenderGame:
             )
 
 
-@dataclass
-class ADGResult:
-    PNE: bool
-    X: np.ndarray
-    ObjVal: float
-    runtime: float
-    phi: float
-
-
 def generate_random_ADG(
     n: int = 20,
     r: int = 50,
@@ -226,13 +227,16 @@ def generate_random_ADG(
     return AttackerDefenderGame(weights, payoffs, capacity, rng)
 
 
-def zero_regrets(adg: AttackerDefenderGame, verbose=False) -> ADGResult:
+def zero_regrets(
+    adg: AttackerDefenderGame, verbose=False, timelimit: int | None = None
+) -> ADGResult:
     """
     Solves the AttackerDefenderGame instance to a PNE if possible and otherwise to a phi-NE.
 
     Args:
         adg (AttackerDefenderGame): Problem instance.
         verbose (bool, optional): Verbally report progress. Defaults to False.
+        timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
 
     Raises:
         ValueError: Problem is infeasible.
@@ -364,6 +368,16 @@ def zero_regrets(adg: AttackerDefenderGame, verbose=False) -> ADGResult:
 
         if verbose:
             print(model.ObjVal)
+
+        if timelimit is None:
+            continue
+        elif time() - start >= timelimit:
+            pne = False
+            result = x.X
+            objval = model.ObjVal
+            phi = phi.X
+            model.close()
+            return ADGResult(pne, result, objval, time() - start, phi, True)
 
     if phi.X >= 1:
         pne = False

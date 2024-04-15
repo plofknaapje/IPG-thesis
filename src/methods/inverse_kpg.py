@@ -6,7 +6,7 @@ import numpy as np
 from numpy.random import Generator
 
 
-from problems.knapsack_packing_game import KnapsackPackingGame
+from problems.knapsack_packing_game import KnapsackPackingGame, zero_regrets
 
 eps = 0.001
 
@@ -22,6 +22,8 @@ def generate_weight_problems(
     rng: Generator | None = None,
     verbose=False,
     allow_phi_ne=False,
+    timelimit: int | None = None,
+    allow_timelimit_reached=False,
 ) -> list[KnapsackPackingGame]:
     """
     Generate KnapsackPackingGame instances with a shared weights matrix.
@@ -37,6 +39,8 @@ def generate_weight_problems(
         rng (Generator | None, optional): Random number generator. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
         allow_phi_ne (bool, optional): Allow KPG instances with a theta-NE. Defaults to False.
+        timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
+        allow_timelimit_reached (bool, optional): Allow solutions which were not solved within the timelimit. Defaults to False.
 
     Returns:
         list[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
@@ -78,10 +82,11 @@ def generate_weight_problems(
         problem = KnapsackPackingGame(
             weights, payoffs, interactions, list(capacity[len(problems)] * weight_sum)
         )
-        problem.solve(allow_phi_ne, verbose)
-        if problem is None:
+
+        result = problem.solve(verbose, timelimit)
+        if not result.PNE and not allow_phi_ne:
             continue
-        elif problem.solution is None:
+        elif result.timelimit_reached and not allow_timelimit_reached:
             continue
         else:
             problems.append(problem)
@@ -103,6 +108,8 @@ def generate_payoff_problems(
     rng=None,
     verbose=False,
     allow_phi_ne=False,
+    timelimit: int | None = None,
+    allow_timelimit_reached=False,
 ) -> list[KnapsackPackingGame]:
     """
     Generate KnapsackPackingGame instances with a shared weights matrix.
@@ -118,6 +125,8 @@ def generate_payoff_problems(
         rng (Generator | None, optional): Random number generator. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
         allow_phi_ne (bool, optional): Allow KPG instances with a theta-NE. Defaults to False.
+        timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
+        allow_timelimit_reached (bool, optional): Allow solutions which were not solved within the timelimit. Defaults to False.
 
     Returns:
         list[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
@@ -161,10 +170,11 @@ def generate_payoff_problems(
             interactions,
             list(capacity[len(problems)] * weights.sum(axis=1)),
         )
-        problem.solve(allow_phi_ne, verbose)
-        if problem is None:
+        result = problem.solve(verbose, timelimit)
+
+        if not result.PNE and not allow_phi_ne:
             continue
-        elif problem.solution is None:
+        elif result.timelimit_reached and not allow_timelimit_reached:
             continue
         else:
             problems.append(problem)
