@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-import time
+from time import time
 import itertools
 
 import numpy as np
@@ -63,13 +63,14 @@ class KnapsackPackingGame:
         print("Interaction coefficients")
         print(self.inter_coefs)
 
-    def solve(self, verbose=False) -> np.ndarray | None:
+    def solve(self, allow_phi_ne=False, verbose=False) -> np.ndarray | None:
         """
         Solve the KPG using zero_regrets(). Sets self.solution if this was None.
         Also changes self.PNE. If self.PNE is True, then the solution is an equilibrium.
         If self.PNE is False, the KPG has no pure stable solution.
 
         Args:
+            allow_phi_ne (bool, optional): Allow solutions with phi-NE. Defaults to False.
             verbose (bool, optional): Transfered to zero_regrets(verbose). Defaults to False.
 
         Returns:
@@ -80,7 +81,11 @@ class KnapsackPackingGame:
             return self.solution
 
         result = zero_regrets(self, verbose)
-        if result.PNE:
+
+        if allow_phi_ne:
+            self.solution = result.X
+            return self.solution
+        elif result.PNE:
             self.solution = result.X
             return self.solution
         else:
@@ -253,6 +258,7 @@ class KPGResult:
     X: np.ndarray
     ObjVal: int
     runtime: float
+    phi: float
 
 
 def generate_random_KPG(
@@ -355,11 +361,13 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
     """
     # Only for n=2!
     # TODO: extend for higher n.
-    start = time.time()
+    start = time()
+    phi_ub = 0
 
     model = gp.Model("ZeroRegrets KPG")
     x = model.addMVar((kpg.n, kpg.m), vtype=GRB.BINARY, name="x")
     z = model.addMVar((kpg.n, kpg.n, kpg.m), vtype=GRB.BINARY, name="z")
+    phi = model.addVar(lb=0, ub=phi_ub)
 
     model.setObjective(
         gp.quicksum(x[p, :] @ kpg.payoffs[p, :] for p in kpg.players)
@@ -412,6 +420,8 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
         print("====")
     cuts = 0
     unequal_payoff = 0
+    solutions = [set() for _ in kpg.players]
+
     while True:
         new_constraint = False
         current_x = x.X
@@ -423,9 +433,7 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
         # Check if a player has net-negative variables and exclude the solutions with them.
         for p in kpg.players:
             for j in range(kpg.m):
-                if current_x[p, j] == 0:
-                    continue
-                elif (
+                if current_x[p, j] == 0 or (
                     kpg.payoffs[p, j] * current_x[p, j]
                     + sum(
                         kpg.inter_coefs[p, o, j] * current_z[p, o, j]
@@ -446,13 +454,14 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
 
         # Add cuts to the problem for each player which has a better solution.
         for p in kpg.players:
-            obj = kpg.payoffs[p, :] @ current_x[p, :] + sum(
-                kpg.inter_coefs[p, p2, :] @ current_z[p, p2, :] for p2 in kpg.opps[p]
-            )
+            obj = kpg.obj_value(p, solution=current_x)
 
             new_x = kpg.solve_player(p, current_x)
+            if tuple(new_x) in solutions[p]:
+                continue
+
             new_obj = kpg.obj_value(p, solution=current_x, player_solution=new_x)
-            if new_obj >= obj + eps:
+            if obj + phi_ub <= new_obj:
                 # Add constraint!
                 model.addConstr(
                     kpg.payoffs[p, :] @ new_x
@@ -467,20 +476,24 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
                         for j in range(kpg.m)
                         for p2 in kpg.opps[p]
                     )
+                    + phi
                 )
                 cuts += 1
                 new_constraint = True
+                solutions[p].add(tuple(new_x))
 
         if not new_constraint:
             break
 
         model.optimize()
 
-        if model.Status == GRB.INFEASIBLE:
-            print("IPG is not feasible (anymore)!")
-            break
+        while model.Status == GRB.INFEASIBLE:
+            print("IPG is not feasible, increasing phi upper bound!")
+            phi_ub += 1
+            phi.ub = phi_ub
+            model.optimize()
 
-    runtime = round(time.time() - start, 1)
+    runtime = time() - start
 
     if verbose:
         print("====")
@@ -488,19 +501,23 @@ def zero_regrets(kpg: KnapsackPackingGame, verbose=False) -> KPGResult:
         print(f"Added {cuts} cuts.")
         print(f"Added {unequal_payoff} unequal payoff constraints.")
 
-    if model.Status == GRB.INFEASIBLE:
-        print(f"Reached INFEASIBLE with {current_obj} in {runtime} seconds")
-        return KPGResult(False, current_x, current_obj, runtime)
-
     if verbose:
         print(f"{model.ObjVal} in {runtime} seconds")
 
-    result = x.X
-    objective = model.ObjVal
+    if phi.X >= 1:
+        pne = False
+        result = current_x
+        objval = current_obj
+        phi = phi.X
+    else:
+        pne = True
+        result = x.X
+        objval = model.ObjVal
+        phi = phi.X
 
     model.close()
 
-    return KPGResult(True, result, objective, runtime)
+    return KPGResult(pne, result, objval, runtime, phi)
 
 
 if __name__ == "__main__":

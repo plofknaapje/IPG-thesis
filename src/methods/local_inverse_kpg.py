@@ -4,5 +4,3 @@ import gurobipy as gp
 from gurobipy import GRB
 
 from problems.knapsack_packing_game import KnapsackPackingGame
-
-

@@ -196,7 +196,7 @@ class ADGResult:
     X: np.ndarray
     ObjVal: float
     runtime: float
-    theta: float
+    phi: float
 
 
 def generate_random_ADG(
@@ -228,7 +228,7 @@ def generate_random_ADG(
 
 def zero_regrets(adg: AttackerDefenderGame, verbose=False) -> ADGResult:
     """
-    Solves the AttackerDefenderGame instance to a PNE if possible and otherwise to a theta-NE.
+    Solves the AttackerDefenderGame instance to a PNE if possible and otherwise to a phi-NE.
 
     Args:
         adg (AttackerDefenderGame): Problem instance.
@@ -242,11 +242,11 @@ def zero_regrets(adg: AttackerDefenderGame, verbose=False) -> ADGResult:
     """
     start = time()
     i_range = list(range(adg.n))
-    theta_ub = 0
+    phi_ub = 0
 
     model = gp.Model("ZeroRegrets ADG")
 
-    theta = model.addVar(lb=0, ub=theta_ub)
+    phi = model.addVar(lb=0, ub=phi_ub)
     x = model.addMVar((2, adg.n), vtype=GRB.BINARY, name="x")
     defender = x[0]
     attacker = x[1]
@@ -304,6 +304,7 @@ def zero_regrets(adg: AttackerDefenderGame, verbose=False) -> ADGResult:
     attacker_solutions = set()
 
     while True:
+        new_constraint = False
         current_x = x.X
         current_obj = model.ObjVal
 
@@ -318,7 +319,7 @@ def zero_regrets(adg: AttackerDefenderGame, verbose=False) -> ADGResult:
         new_att_obj = adg.obj_value(False, defender.X, new_att_x)
 
         if (
-            curr_def_obj + theta_ub <= new_def_obj
+            curr_def_obj + phi_ub <= new_def_obj
             and tuple(new_def_x) not in defender_solutions
         ):
             model.addConstr(
@@ -329,12 +330,13 @@ def zero_regrets(adg: AttackerDefenderGame, verbose=False) -> ADGResult:
                     + adg.overcommit * new_def_x * (1 - attacker)
                     + adg.success * (1 - new_def_x) * attacker
                 )
-                <= def_obj + theta
+                <= def_obj + phi
             )
             defender_solutions.add(tuple(new_def_x))
+            new_constraint = True
 
-        elif (
-            curr_att_obj + theta_ub <= new_att_obj
+        if (
+            curr_att_obj + phi_ub <= new_att_obj
             and tuple(new_att_x) not in attacker_solutions
         ):
             model.addConstr(
@@ -344,40 +346,41 @@ def zero_regrets(adg: AttackerDefenderGame, verbose=False) -> ADGResult:
                     + (1 - defender) * new_att_x
                     + (1 - adg.mitigated) * defender * new_att_x
                 )
-                <= att_obj + theta
+                <= att_obj + phi
             )
             attacker_solutions.add(tuple(new_att_x))
+            new_constraint = True
 
-        else:
+        if not new_constraint:
             break
 
         model.optimize()
 
         while model.Status == GRB.INFEASIBLE:
-            print("IPG is not feasible, increasing theta upper bound!")
-            theta_ub += 1
-            theta.ub = theta_ub
+            print("IPG is not feasible, increasing phi upper bound!")
+            phi_ub += 1
+            phi.ub = phi_ub
             model.optimize()
 
         if verbose:
             print(model.ObjVal)
 
-    if theta.X >= 1:
+    if phi.X >= 1:
         pne = False
         result = current_x
         objval = current_obj
-        theta = theta.X
+        phi = phi.X
     else:
         pne = True
         result = x.X
         objval = model.ObjVal
-        theta = theta.X
+        phi = phi.X
 
     model.close()
 
     runtime = time() - start
 
-    return ADGResult(pne, result, objval, runtime, theta)
+    return ADGResult(pne, result, objval, runtime, phi)
 
 
 if __name__ == "__main__":

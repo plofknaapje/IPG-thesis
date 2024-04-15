@@ -21,6 +21,7 @@ def generate_weight_problems(
     inter_factor=3,
     rng: Generator | None = None,
     verbose=False,
+    allow_phi_ne=False,
 ) -> list[KnapsackPackingGame]:
     """
     Generate KnapsackPackingGame instances with a shared weights matrix.
@@ -35,6 +36,7 @@ def generate_weight_problems(
         inter_factor (int, optional): Denominator to limit the influence of interaction. Defaults to 3.
         rng (Generator | None, optional): Random number generator. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
+        allow_phi_ne (bool, optional): Allow KPG instances with a theta-NE. Defaults to False.
 
     Returns:
         list[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
@@ -76,9 +78,16 @@ def generate_weight_problems(
         problem = KnapsackPackingGame(
             weights, payoffs, interactions, list(capacity[len(problems)] * weight_sum)
         )
-        problem.solve(verbose)
-        if problem is not None:
+        problem.solve(allow_phi_ne, verbose)
+        if problem is None:
+            continue
+        elif problem.solution is None:
+            continue
+        else:
             problems.append(problem)
+
+        if len(problems) != 0 and len(problems) % 10 == 0:
+            print(f"{len(problems)} problems generated.")
 
     return problems
 
@@ -93,6 +102,7 @@ def generate_payoff_problems(
     inter_factor=3,
     rng=None,
     verbose=False,
+    allow_phi_ne=False,
 ) -> list[KnapsackPackingGame]:
     """
     Generate KnapsackPackingGame instances with a shared weights matrix.
@@ -107,6 +117,7 @@ def generate_payoff_problems(
         inter_factor (int, optional): Denominator to limit the influence of interaction. Defaults to 3.
         rng (Generator | None, optional): Random number generator. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
+        allow_phi_ne (bool, optional): Allow KPG instances with a theta-NE. Defaults to False.
 
     Returns:
         list[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
@@ -150,9 +161,16 @@ def generate_payoff_problems(
             interactions,
             list(capacity[len(problems)] * weights.sum(axis=1)),
         )
-        problem.solve(verbose)
-        if problem is not None:
+        problem.solve(allow_phi_ne, verbose)
+        if problem is None:
+            continue
+        elif problem.solution is None:
+            continue
+        else:
             problems.append(problem)
+
+        if len(problems) != 0 and len(problems) % 10 == 0:
+            print(f"{len(problems)} problems generated.")
 
     return problems
 
@@ -215,14 +233,14 @@ def inverse_weights(problems: list[KnapsackPackingGame], verbose=False) -> np.nd
 
         model.optimize()
 
-        if np.array_equal(current_w, w.X):
-            break
-
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
 
+        if np.array_equal(current_w, w.X):
+            break
+
         if verbose:
-            error = np.abs(inverse - problems[0].weights).sum()
+            error = np.abs(current_w - problems[0].weights).sum()
             print(error, error / problems[0].weights.sum())
 
     inverse = w.X
@@ -296,34 +314,34 @@ def inverse_payoffs(problems: list[KnapsackPackingGame], verbose=False) -> np.nd
                 new_constraint = True
                 solutions[i, j].add(tuple(new_solution))
 
-                temp_new_value = new_solution @ p.X[j] + sum(
-                    new_solution * problem.solution[o] @ problem.inter_coefs[j, o]
-                    for o in problem.opps[j]
-                )
+                # temp_new_value = new_solution @ p.X[j] + sum(
+                #     new_solution * problem.solution[o] @ problem.inter_coefs[j, o]
+                #     for o in problem.opps[j]
+                # )
 
-                temp_true_value = problem.solution[j] @ p.X[j] + sum(
-                    problem.solution[j]
-                    * problem.solution[o]
-                    @ problem.inter_coefs[j, o]
-                    for o in problem.opps[j]
-                )
+                # temp_true_value = problem.solution[j] @ p.X[j] + sum(
+                #     problem.solution[j]
+                #     * problem.solution[o]
+                #     @ problem.inter_coefs[j, o]
+                #     for o in problem.opps[j]
+                # )
 
-                if temp_new_value >= temp_true_value + eps:
-                    model.addConstr(new_value <= true_values[i, j])
+                # if temp_new_value >= temp_true_value + eps:
+                #     model.addConstr(new_value <= true_values[i, j])
 
         if not new_constraint:
             break
 
         model.optimize()
 
-        if np.array_equal(p.X, current_p):
-            break
-
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
 
+        if np.array_equal(p.X, current_p):
+            break
+
         if verbose:
-            error = np.abs(inverse - problems[0].payoffs).sum()
+            error = np.abs(current_p - problems[0].payoffs).sum()
             print(error, error / problems[0].payoffs.sum())
 
     inverse = p.X
