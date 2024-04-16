@@ -8,16 +8,27 @@ from methods.inverse_kpg import (
     inverse_weights,
     inverse_payoffs,
 )
+from problems.base import ApproxOptions
 
 start = time()
 rng = np.random.default_rng(1)
 
-approach = "payoff"
+approach = "weight"
+options = ApproxOptions(allow_phi_ne=False, timelimit=15, allow_timelimit_reached=False)
+
 
 match approach:
     case "weight":
         weight_problems = generate_weight_problems(
-            50, 2, 20, 100, 0.5, corr=True, rng=rng, verbose=False, allow_phi_ne=False
+            50,
+            2,
+            20,
+            100,
+            0.5,
+            corr=True,
+            approx_options=options,
+            rng=rng,
+            verbose=False,
         )
         print("Problem generation finished")
 
@@ -27,7 +38,15 @@ match approach:
 
     case "payoff":
         payoff_problems = generate_payoff_problems(
-            100, 2, 20, 100, [0.5, 0.5], corr=True, rng=rng, allow_phi_ne=True
+            100,
+            2,
+            20,
+            100,
+            [0.5, 0.5],
+            corr=True,
+            approx_options=options,
+            rng=rng,
+            verbose=False,
         )
 
         print("Problem generation finished")

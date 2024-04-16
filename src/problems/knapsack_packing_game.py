@@ -7,19 +7,9 @@ import gurobipy as gp
 from gurobipy import GRB
 
 from problems.utils import powerset
+from problems.base import IPGResult
 
 eps = 0.001
-
-
-@dataclass
-class KPGResult:
-    # Class for storing result of solving KPG instance
-    PNE: bool
-    X: np.ndarray
-    ObjVal: int
-    runtime: float
-    phi: float
-    timelimit_reached: bool = False
 
 
 @dataclass
@@ -38,14 +28,14 @@ class KnapsackPackingGame:
         np.ndarray
     )  # interaction payoff of the items (n, n, m) with 0 on diagonals
     solution: np.ndarray | None
-    result: KPGResult | None
+    result: IPGResult | None
 
     def __init__(
         self,
         weights: np.ndarray,
         payoffs: np.ndarray,
         inter_coefs: np.ndarray,
-        capacity: list[float],
+        capacity: list[int],
     ):
         """
         Create a new instance of the KnapsackPackingGame
@@ -63,7 +53,7 @@ class KnapsackPackingGame:
         self.players = list(range(self.n))
         self.pairs = list(itertools.permutations(self.players, 2))
         self.opps = [[o for p, o in self.pairs if p == j] for j in self.players]
-        self.capacity = [int(cap) for cap in capacity]
+        self.capacity = capacity
         self.solution = None
         self.result = None
 
@@ -76,83 +66,53 @@ class KnapsackPackingGame:
         print("Interaction coefficients")
         print(self.inter_coefs)
 
-    def solve(self, verbose=False, timelimit: int | None = None) -> KPGResult:
+    def solve(self, verbose=False, timelimit: int | None = None) -> IPGResult:
         """
         Solve the KPG using zero_regrets(). Sets self.solution if this was None.
-        Also changes self.PNE. If self.PNE is True, then the solution is an equilibrium.
-        If self.PNE is False, the KPG has no pure stable solution.
+        Sets self.result too, which records the information of the solution.
 
         Args:
-            allow_phi_ne (bool, optional): Allow solutions with phi-NE. Defaults to False.
             verbose (bool, optional): Transfered to zero_regrets(verbose). Defaults to False.
+            timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
 
         Returns:
-            np.ndarray | None: optimal solution for all players if that was found. None otherwise.
+            IPGResult: Object with all solving information.
         """
         if self.solution is not None:
             print("Already solved")
             return self.result
 
-        self.result = zero_regrets(self, verbose, timelimit)
+        self.result = zero_regrets_kpg(self, verbose, timelimit)
         self.solution = self.result.X
         return self.result
 
-    def solve_player(self, player: int, solution: np.ndarray) -> np.ndarray:
+    def solve_player(
+        self,
+        player: int,
+        solution: np.ndarray | None = None,
+        weights: np.ndarray | None = None,
+        payoffs: np.ndarray | None = None,
+        inter_coefs: np.ndarray | None = None,
+    ) -> np.ndarray:
+        if solution is None:
+            if self.solution is None:
+                raise ValueError("KPG was not yet solved!")
+            solution = self.solution
+        if weights is None:
+            weights = self.weights
+        if payoffs is None:
+            payoffs = self.payoffs
+        if inter_coefs is None:
+            inter_coefs = self.inter_coefs
+
         model = gp.Model("KPG player")
 
         x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
 
         model.setObjective(
-            x @ self.payoffs[player]
+            x @ payoffs[player]
             + gp.quicksum(
-                x * solution[opp] @ self.inter_coefs[player, opp]
-                for opp in self.opps[player]
-            ),
-            GRB.MAXIMIZE,
-        )
-
-        model.addConstr(x @ self.weights[player] <= self.capacity[player])
-
-        model.optimize()
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible!")
-
-        result = x.X
-
-        model.close()
-
-        return result
-
-    def solve_player_weights(
-        self, weights: np.ndarray, player: int, solution: np.ndarray | None = None
-    ) -> np.ndarray:
-        """
-        Solves the KPG from the perspective of one player given the solutions of
-        other players using a given set of weights.
-
-        Args:
-            weights (np.ndarray): new weights.
-            player (int): index of the player.
-            solution (np.ndaray | None, optional): external solution. If None, use self.solution. Defaults to None.
-
-        Raises:
-            ValueError: if the problem is infeasible.
-
-        Returns:
-            np.ndarray: optimal solution to the problem.
-        """
-        if solution is None:
-            solution = self.solution
-
-        model = gp.Model("KPG player weights")
-
-        x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
-
-        model.setObjective(
-            x @ self.payoffs[player]
-            + gp.quicksum(
-                x * solution[opp] @ self.inter_coefs[player, opp]
+                x * solution[opp] @ inter_coefs[player, opp]
                 for opp in self.opps[player]
             ),
             GRB.MAXIMIZE,
@@ -171,52 +131,37 @@ class KnapsackPackingGame:
 
         return result
 
-    def solve_player_payoffs(
-        self, payoffs: np.ndarray, player: int, solution: np.ndarray | None = None
-    ) -> np.ndarray:
-        """
-        Solves the KPG from the perspective of one player given the solutions of
-        other players using a given set of payoffs.
+    def solve_greedy(self) -> np.ndarray:
+        p_w_ratio = self.payoffs / self.weights
+        initial_x = np.zeros_like(p_w_ratio)
+        total_weight = np.zeros(self.n)
+        print(p_w_ratio)
 
-        Args:
-            payoffs (np.ndarray): new payoffs.
-            player (int): index of the player.
-            solution (np.ndaray | None, optional): external solution. If None, use self.solution. Defaults to None.
+        # Initial selection without interaction
+        for p in self.players:
+            while p_w_ratio[p].sum() > 0:
+                highest = np.argmax(p_w_ratio[p])
+                if total_weight[p] + self.weights[p, highest] <= self.capacity[p]:
+                    initial_x[p, highest] = 1
+                    total_weight[p] += self.weights[p, highest]
+                p_w_ratio[p, highest] = 0
 
-        Raises:
-            ValueError: if the problem is infeasible.
+        # Add interaction terms
+        p_w_ratio = (
+            self.payoffs + (self.inter_coefs * initial_x).sum(axis=0)
+        ) / self.weights
+        final_x = np.zeros_like(p_w_ratio)
+        total_weight = np.zeros(self.n)
 
-        Returns:
-            np.ndarray: optimal solution to the problem.
-        """
-        if solution is None:
-            solution = self.solution
+        for p in self.players:
+            while p_w_ratio[p].sum() > 0:
+                highest = np.argmax(p_w_ratio[p])
+                if total_weight[p] + self.weights[p, highest] <= self.capacity[p]:
+                    final_x[p, highest] = 1
+                    total_weight[p] += self.weights[p, highest]
+                p_w_ratio[p, highest] = 0
 
-        model = gp.Model("KPG player payoffs")
-
-        x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
-
-        model.setObjective(
-            x @ payoffs[player]
-            + gp.quicksum(
-                x * solution[opp] @ self.inter_coefs[player, opp]
-                for opp in self.opps[player]
-            ),
-            GRB.MAXIMIZE,
-        )
-
-        model.addConstr(x @ self.weights[player] <= self.capacity[player])
-
-        model.optimize()
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible!")
-
-        result = x.X
-
-        model.close()
-
-        return result
+        return final_x
 
     def obj_value(
         self,
@@ -260,57 +205,38 @@ class KnapsackPackingGame:
 def generate_random_KPG(
     n=2,
     m=25,
-    capacity=0.2,
-    weight_type="sym",
-    payoff_type="sym",
-    interaction_type="sym",
+    r=100,
+    capacity=0.4,
+    corr=True,
+    inter_factor=3,
 ) -> KnapsackPackingGame:
-    players = list(range(n))
+    rng = np.random.default_rng()
+    weights = rng.integers(1, r + 1, (n, m))
 
-    match weight_type:
-        case "sym":
-            weight = np.random.randint(1, 101, m)
-            weights = np.zeros((n, m))
-            for p in players:
-                weights[p, :] = weight
-        case "asym":
-            weights = np.random.randint(1, 101, (n, m))
-        case _:
-            raise ValueError("Weight type not recognised!")
+    if corr:
+        lower = np.maximum(weights - r / 5, 1)
+        upper = np.minimum(weights + r / 5, r + 1)
 
-    match payoff_type:
-        case "sym":
-            payoff = np.random.randint(1, 101, m)
-            payoffs = np.zeros((n, m))
-            for p in players:
-                payoffs[p, :] = payoff
-        case "asym":
-            payoffs = np.random.randint(1, 101, (n, m))
-        case _:
-            raise ValueError("Payoff type not recognised!")
+    if corr:
+        payoffs = rng.integers(lower, upper)
+    else:
+        payoffs = rng.integers(1, r + 1, (n, m))
 
-    match interaction_type:
-        case "sym":
-            coefs = np.random.randint(1, 101, (n, n))
-            interaction_coefs = np.zeros((n, n, m))
-            for j in range(m):
-                interaction_coefs[:, :, j] = coefs
-        case "asym":
-            interaction_coefs = np.random.randint(1, 101, (n, n, m))
-        case "negasym":
-            interaction_coefs = np.random.randint(-100, 101, (n, n, m))
-        case _:
-            raise ValueError("Interaction type not recognised!")
+    interactions = rng.integers(1, int(r / inter_factor) + 1, (n, n, m))
+    mask = rng.integers(0, 2, (n, n, m))
+    interactions = interactions * mask
 
-    for p in players:
-        interaction_coefs[p, p, :] = 0
+    for i in range(n):
+        interactions[i, i, :] = 0
 
     # Interaction cleanup
     for j in range(m):
         for p in range(n):
-            interaction_coefs[p, p, j] = 0
+            interactions[p, p, j] = 0
 
-    kpg = KnapsackPackingGame(weights, payoffs, interaction_coefs, capacity)
+    capacity = [capacity * weights[p].sum() for p in range(n)]
+
+    kpg = KnapsackPackingGame(weights, payoffs, interactions, capacity)
 
     return kpg
 
@@ -344,9 +270,9 @@ def read_file(file: str) -> KnapsackPackingGame:
     return kpg
 
 
-def zero_regrets(
+def zero_regrets_kpg(
     kpg: KnapsackPackingGame, verbose=False, timelimit: int | None = None
-) -> KPGResult:
+) -> IPGResult:
     """
     Solves kpg using the ZeroRegrets methods of cutting.
 
@@ -356,7 +282,7 @@ def zero_regrets(
         timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
 
     Returns:
-        KPGResult: result of solving the KPG problem.
+        IPGResult: Object with all solving information.
     """
     # Only for n=2!
     # TODO: extend for higher n.
@@ -453,19 +379,21 @@ def zero_regrets(
 
         # Add cuts to the problem for each player which has a better solution.
         for p in kpg.players:
-            obj = kpg.obj_value(p, solution=current_x)
+            player_obj = kpg.obj_value(p, solution=current_x)
 
-            new_x = kpg.solve_player(p, current_x)
-            if tuple(new_x) in solutions[p]:
+            new_player_x = kpg.solve_player(p, solution=current_x)
+            if tuple(new_player_x) in solutions[p]:
                 continue
 
-            new_obj = kpg.obj_value(p, solution=current_x, player_solution=new_x)
-            if obj + phi_ub <= new_obj:
+            new_player_obj = kpg.obj_value(
+                p, solution=current_x, player_solution=new_player_x
+            )
+            if player_obj + phi_ub <= new_player_obj:
                 # Add constraint!
                 model.addConstr(
-                    kpg.payoffs[p, :] @ new_x
+                    kpg.payoffs[p, :] @ new_player_x
                     + gp.quicksum(
-                        kpg.inter_coefs[p, p2, j] * new_x[j] * x[p2, j]
+                        kpg.inter_coefs[p, p2, j] * new_player_x[j] * x[p2, j]
                         for j in range(kpg.m)
                         for p2 in kpg.opps[p]
                     )
@@ -479,7 +407,7 @@ def zero_regrets(
                 )
                 cuts += 1
                 new_constraint = True
-                solutions[p].add(tuple(new_x))
+                solutions[p].add(tuple(new_player_x))
 
         if not new_constraint:
             break
@@ -500,18 +428,16 @@ def zero_regrets(
             objval = model.ObjVal
             phi = phi.X
             model.close()
-            return KPGResult(pne, result, objval, time() - start, phi, True)
+            return IPGResult(pne, result, objval, time() - start, phi, True)
 
     if verbose:
         print("====")
         print(f"Added {dominance} dominance constraints.")
         print(f"Added {cuts} cuts.")
         print(f"Added {unequal_payoff} unequal payoff constraints.")
-
-    if verbose:
         print(f"{model.ObjVal} in {time() - start} seconds")
 
-    if phi.X >= 1:
+    if phi_ub >= 1:
         pne = False
         result = x.X
         objval = model.ObjVal
@@ -524,20 +450,4 @@ def zero_regrets(
 
     model.close()
 
-    return KPGResult(pne, result, objval, time() - start, phi)
-
-
-if __name__ == "__main__":
-    np.random.seed(42)
-    prefix = "instances_kp/generated/"
-
-    for capacity in [2, 5, 8]:
-        file = prefix + f"2-25-{capacity}-cij-n.txt"
-        print(file)
-        instance = read_file(file)
-        result = zero_regrets(instance, True)
-
-    # kpg = KPG.generate(m=25, capacity=0.2, weight_type="asym", payoff_type="asym", interaction_type="asym")
-
-    # x, obj, runtime = zero_regrets(kpg)
-    # print(runtime)
+    return IPGResult(pne, result, objval, time() - start, phi)

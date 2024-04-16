@@ -1,12 +1,10 @@
-from time import time
-
 import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
 from numpy.random import Generator
 
-
-from problems.knapsack_packing_game import KnapsackPackingGame, zero_regrets
+from problems.knapsack_packing_game import KnapsackPackingGame
+from problems.base import ApproxOptions
 
 eps = 0.001
 
@@ -19,11 +17,9 @@ def generate_weight_problems(
     capacity: float | list[float] | list[list[float]] | None = None,
     corr=True,
     inter_factor=3,
+    approx_options: ApproxOptions | None = None,
     rng: Generator | None = None,
     verbose=False,
-    allow_phi_ne=False,
-    timelimit: int | None = None,
-    allow_timelimit_reached=False,
 ) -> list[KnapsackPackingGame]:
     """
     Generate KnapsackPackingGame instances with a shared weights matrix.
@@ -36,17 +32,18 @@ def generate_weight_problems(
         capacity (float | list[float] | list[list[float]] | None, optional): Fractional capacity of instances. Defaults to None.
         corr (bool, optional): Should weights and payoffs be correlated?. Defaults to True.
         inter_factor (int, optional): Denominator to limit the influence of interaction. Defaults to 3.
+        approx_options (ApproxOptions | None, optional): How to deal with approximate solutions?. Defaults to None.
         rng (Generator | None, optional): Random number generator. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
-        allow_phi_ne (bool, optional): Allow KPG instances with a theta-NE. Defaults to False.
-        timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
-        allow_timelimit_reached (bool, optional): Allow solutions which were not solved within the timelimit. Defaults to False.
+
 
     Returns:
         list[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
     """
     if rng is None:
         rng = np.random.default_rng()
+    if approx_options is None:
+        approx_options = ApproxOptions()
 
     problems = []
 
@@ -83,12 +80,9 @@ def generate_weight_problems(
             weights, payoffs, interactions, list(capacity[len(problems)] * weight_sum)
         )
 
-        result = problem.solve(verbose, timelimit)
-        if not result.PNE and not allow_phi_ne:
-            continue
-        elif result.timelimit_reached and not allow_timelimit_reached:
-            continue
-        else:
+        result = problem.solve(verbose, approx_options.timelimit)
+
+        if approx_options.valid_problem(result):
             problems.append(problem)
 
         if len(problems) != 0 and len(problems) % 10 == 0:
@@ -105,11 +99,9 @@ def generate_payoff_problems(
     capacity: float | list[float] | list[list[float]] | None = None,
     corr=True,
     inter_factor=3,
+    approx_options: ApproxOptions | None = None,
     rng=None,
     verbose=False,
-    allow_phi_ne=False,
-    timelimit: int | None = None,
-    allow_timelimit_reached=False,
 ) -> list[KnapsackPackingGame]:
     """
     Generate KnapsackPackingGame instances with a shared weights matrix.
@@ -122,17 +114,17 @@ def generate_payoff_problems(
         capacity (float | list[float] | list[list[float]] | None, optional): Fractional capacity of instances. Defaults to None.
         corr (bool, optional): Should weights and payoffs be correlated?. Defaults to True.
         inter_factor (int, optional): Denominator to limit the influence of interaction. Defaults to 3.
+        approx_options (ApproxOptions | None, optional): How to deal with approximate solutions?. Defaults to None.
         rng (Generator | None, optional): Random number generator. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
-        allow_phi_ne (bool, optional): Allow KPG instances with a theta-NE. Defaults to False.
-        timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
-        allow_timelimit_reached (bool, optional): Allow solutions which were not solved within the timelimit. Defaults to False.
 
     Returns:
         list[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
     """
     if rng is None:
         rng = np.random.default_rng()
+    if approx_options is None:
+        approx_options = ApproxOptions()
 
     problems = []
 
@@ -170,13 +162,9 @@ def generate_payoff_problems(
             interactions,
             list(capacity[len(problems)] * weights.sum(axis=1)),
         )
-        result = problem.solve(verbose, timelimit)
+        result = problem.solve(verbose, approx_options.timelimit)
 
-        if not result.PNE and not allow_phi_ne:
-            continue
-        elif result.timelimit_reached and not allow_timelimit_reached:
-            continue
-        else:
+        if approx_options.valid_problem(result):
             problems.append(problem)
 
         if len(problems) != 0 and len(problems) % 10 == 0:
@@ -231,7 +219,7 @@ def inverse_weights(problems: list[KnapsackPackingGame], verbose=False) -> np.nd
 
         for i, problem in enumerate(problems):
             for j in players:
-                new_solution = problem.solve_player_weights(w.X, j)
+                new_solution = problem.solve_player(j, weights=w.X)
                 new_value = problem.obj_value(j, player_solution=new_solution)
 
                 if new_value >= true_value[i, j] + eps:
@@ -312,7 +300,7 @@ def inverse_payoffs(problems: list[KnapsackPackingGame], verbose=False) -> np.nd
 
         for i, problem in enumerate(problems):
             for j in players:
-                new_solution = problem.solve_player_payoffs(p.X, j)
+                new_solution = problem.solve_player(j, payoffs=p.X)
                 if tuple(new_solution) in solutions[i, j]:
                     continue
 
