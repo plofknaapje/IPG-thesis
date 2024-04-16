@@ -6,66 +6,28 @@ from gurobipy import GRB
 import numpy as np
 from numpy.random import Generator
 
-
-@dataclass
-class ADGResult:
-    PNE: bool
-    X: np.ndarray
-    ObjVal: float
-    runtime: float
-    phi: float
-    timelimit_reached: bool = False
+from problems.base import IPGResult
 
 
 @dataclass
-class AttackerDefenderGame:
-    n: int  # number of targets
-    weights: np.ndarray  # costs for defender and attacker (2, n)
-    payoffs: np.ndarray  # rewards for defender and attacker (2, n)
-    capacity: tuple[int, int]  # budget/capacity of defender and attacker (2, n)
-    overcommit: float  # sunken cost of defender.
-    mitigated: float  # mitigation costs / reward, eta < eps.
-    success: float  # attack cost of defender. delta < eta.
-    normal: float  # opportunit cost of defender.
-    solution: np.ndarray | None
-    result: ADGResult | Noe
+class ADGParams:
+    success: float  # Delta
+    mitigated: float  # Eta
+    overcommit: float  # Epsilon
+    normal: float  # Gamma
+    capacity_perc: list[float, float]
 
     def __init__(
         self,
-        weights: np.ndarray,
-        payoffs: np.ndarray,
-        cap_percentage: tuple[float, float] | None = None,
-        overcommit: float | None = None,
-        mitigated: float | None = None,
-        success: float | None = None,
-        normal: float | None = None,
+        success: float | None,
+        mitigated: float | None,
+        overcommit: float | None,
+        normal: float | None,
+        capacity_perc: list[float, float] | None = None,
         rng: Generator | None = None,
     ):
-        """
-        Create a new instance of the AttackerDefenderGame.
-
-        Args:
-            weights (np.ndarray): _description_
-            payoffs (np.ndarray): _description_
-            cap_percentage (tuple[float, float] | None, optional): Capacity percentage per player. Defaults to None.
-            overcommit (float | None, optional): Reward for protecting safe nodes. Defaults to None.
-            mitigated (float | None, optional): Reward for mitigating an attack. Defaults to None.
-            success (float | None, optional): Reward for a successful attack. Defaults to None.
-            normal (float | None, optional): Attacker opportunity cost. Defaults to None.
-            rng (Generator | None, optional): Random number generator. Defaults to None.
-        """
         if rng is None:
             rng = np.random.default_rng()
-
-        self.n = weights.shape[1]
-        self.weights = weights
-        self.payoffs = payoffs
-        if cap_percentage is None:
-            defender_budget = rng.uniform(0.3, 0.8)
-            cap_percentage = [defender_budget, defender_budget / rng.integers(3, 10)]
-        self.capacity = tuple(
-            [int(cap_percentage[i] * weights[i].sum()) for i in [0, 1]]
-        )
 
         if overcommit is None or mitigated is None or success is None:
             self.mitigated = np.round(rng.uniform(0.55, 0.85), 2)
@@ -81,25 +43,81 @@ class AttackerDefenderGame:
         else:
             self.normal = normal
 
-        self.solution = None
-        self.result = None
+        if capacity_perc is None:
+            defender_budget = rng.uniform(0.3, 0.8)
+            self.capacity_perc = [
+                defender_budget,
+                defender_budget / rng.integers(5, 10),
+            ]
+        else:
+            self.capacity_perc = capacity_perc
 
-    def solve(self, verbose=False, timelimit: int | None = None) -> ADGResult:
+        if self.success >= self.mitigated or self.mitigated >= self.overcommit:
+            raise ValueError("Invalid parameters for ADG")
+
+
+@dataclass
+class AttackerDefenderGame:
+    n: int  # number of targets
+    weights: np.ndarray  # costs for defender and attacker (2, n)
+    payoffs: np.ndarray  # rewards for defender and attacker (2, n)
+    capacity: list[int, int]  # budget/capacity of defender and attacker (2, n)
+    overcommit: float  # sunken cost of defender.
+    mitigated: float  # mitigation costs / reward, eta < eps.
+    success: float  # attack cost of defender. delta < eta.
+    normal: float  # opportunit cost of defender.
+    solution: np.ndarray | None = None
+    result: IPGResult | None = None
+
+    def __init__(
+        self,
+        weights: np.ndarray,
+        payoffs: np.ndarray,
+        parameters: ADGParams,
+        rng: Generator | None = None,
+    ):
         """
-        Solve self with the zero_regrets algorithm. Updates self.solution/
+        Create a new instance of the AttackerDefenderGame.
+
+        Args:
+            weights (np.ndarray): _description_
+            payoffs (np.ndarray): _description_
+            parameters (ADGParams): Object for storing and generating AttackerDefenderGame parameters.
+            cap_percentage (list[float, float] | None, optional): Capacity percentage per player. Defaults to None.
+            rng (Generator | None, optional): Random number generator. Defaults to None.
+        """
+        if rng is None:
+            rng = np.random.default_rng()
+
+        self.n = weights.shape[1]
+        self.weights = weights
+        self.payoffs = payoffs
+
+        self.capacity = list(
+            [int(parameters.capacity_perc[i] * weights[i].sum()) for i in [0, 1]]
+        )
+        self.overcommit = parameters.overcommit
+        self.mitigated = parameters.mitigated
+        self.success = parameters.success
+        self.normal = parameters.normal
+
+    def solve(self, verbose=False, timelimit: int | None = None) -> IPGResult:
+        """
+        Solve the KPG using zero_regrets(). Sets self.solution if this was None.
+        Sets self.result too, which records the information of the solution.
 
         Args:
             verbose (bool, optional): Verbose progress reports. Defaults to False.
             timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
 
         Returns:
-            np.ndarray | None: Solution or None if the result is not a PNE.
+            IPGResult: Object with all solving information.
         """
         if self.solution is not None:
             print("Problem was already solved")
             return self.result
 
-        self.result = zero_regrets(self, verbose, timelimit)
+        self.result = zero_regrets_adg(self, verbose, timelimit)
         self.solution = self.result.X
         return self.result
 
@@ -227,9 +245,9 @@ def generate_random_ADG(
     return AttackerDefenderGame(weights, payoffs, capacity, rng)
 
 
-def zero_regrets(
+def zero_regrets_adg(
     adg: AttackerDefenderGame, verbose=False, timelimit: int | None = None
-) -> ADGResult:
+) -> IPGResult:
     """
     Solves the AttackerDefenderGame instance to a PNE if possible and otherwise to a phi-NE.
 
@@ -242,7 +260,7 @@ def zero_regrets(
         ValueError: Problem is infeasible.
 
     Returns:
-        ADGResult: Results of the zero_regrets process.
+        IPGResult: Object with all solving information.
     """
     start = time()
     i_range = list(range(adg.n))
@@ -310,20 +328,20 @@ def zero_regrets(
     while True:
         new_constraint = False
         current_x = x.X
-        current_obj = model.ObjVal
+        obj = model.ObjVal
 
         # Defender
-        curr_def_obj = def_obj.getValue()
+        def_obj = def_obj.getValue()
         new_def_x = adg.solve_player(True, x.X)
         new_def_obj = adg.obj_value(True, new_def_x, attacker.X)
 
         # Attacker
-        curr_att_obj = att_obj.getValue()
+        att_obj = att_obj.getValue()
         new_att_x = adg.solve_player(False, x.X)
         new_att_obj = adg.obj_value(False, defender.X, new_att_x)
 
         if (
-            curr_def_obj + phi_ub <= new_def_obj
+            def_obj + phi_ub <= new_def_obj
             and tuple(new_def_x) not in defender_solutions
         ):
             model.addConstr(
@@ -340,7 +358,7 @@ def zero_regrets(
             new_constraint = True
 
         if (
-            curr_att_obj + phi_ub <= new_att_obj
+            att_obj + phi_ub <= new_att_obj
             and tuple(new_att_x) not in attacker_solutions
         ):
             model.addConstr(
@@ -377,12 +395,12 @@ def zero_regrets(
             objval = model.ObjVal
             phi = phi.X
             model.close()
-            return ADGResult(pne, result, objval, time() - start, phi, True)
+            return IPGResult(pne, result, objval, time() - start, phi, True)
 
-    if phi.X >= 1:
+    if phi_ub >= 1:
         pne = False
         result = current_x
-        objval = current_obj
+        objval = obj
         phi = phi.X
     else:
         pne = True
@@ -394,9 +412,9 @@ def zero_regrets(
 
     runtime = time() - start
 
-    return ADGResult(pne, result, objval, runtime, phi)
+    return IPGResult(pne, result, objval, runtime, phi)
 
 
 if __name__ == "__main__":
     instance = generate_random_ADG(n=20, r=25)
-    print(zero_regrets(instance, True))
+    print(zero_regrets_adg(instance, True))
