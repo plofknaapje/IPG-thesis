@@ -17,9 +17,11 @@ def generate_weight_problems(
     capacity: float | list[float] | list[list[float]] | None = None,
     corr=True,
     inter_factor=3,
+    neg_inter=False,
     approx_options: ApproxOptions | None = None,
     rng: Generator | None = None,
     verbose=False,
+    solve=True,
 ) -> list[KnapsackPackingGame]:
     """
     Generate KnapsackPackingGame instances with a shared weights matrix.
@@ -32,10 +34,11 @@ def generate_weight_problems(
         capacity (float | list[float] | list[list[float]] | None, optional): Fractional capacity of instances. Defaults to None.
         corr (bool, optional): Should weights and payoffs be correlated?. Defaults to True.
         inter_factor (int, optional): Denominator to limit the influence of interaction. Defaults to 3.
+        neg_inter (bool, optional): Allow for negative interactions. Defaults to False.
         approx_options (ApproxOptions | None, optional): How to deal with approximate solutions?. Defaults to None.
         rng (Generator | None, optional): Random number generator. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
-
+        solve (bool, optional): Solve all problems and check solvability. Defaults to True.
 
     Returns:
         list[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
@@ -70,7 +73,10 @@ def generate_weight_problems(
             payoffs = rng.integers(1, r + 1, (n, m))
 
         interactions = rng.integers(1, int(r / inter_factor) + 1, (n, n, m))
-        mask = rng.integers(0, 2, (n, n, m))
+        if neg_inter:
+            mask = rng.integers(-1, 2, (n, n, m))
+        else:
+            mask = rng.integers(0, 2, (n, n, m))
         interactions = interactions * mask
 
         for i in range(n):
@@ -80,13 +86,16 @@ def generate_weight_problems(
             weights, payoffs, interactions, list(capacity[len(problems)] * weight_sum)
         )
 
-        result = problem.solve(verbose, approx_options.timelimit)
+        if solve:
+            result = problem.solve(verbose, approx_options.timelimit)
 
-        if approx_options.valid_problem(result):
+            if approx_options.valid_problem(result):
+                problems.append(problem)
+
+            if len(problems) != 0 and len(problems) % 10 == 0:
+                print(f"{len(problems)} problems generated.")
+        else:
             problems.append(problem)
-
-        if len(problems) != 0 and len(problems) % 10 == 0:
-            print(f"{len(problems)} problems generated.")
 
     return problems
 
@@ -99,9 +108,11 @@ def generate_payoff_problems(
     capacity: float | list[float] | list[list[float]] | None = None,
     corr=True,
     inter_factor=3,
+    neg_inter=False,
     approx_options: ApproxOptions | None = None,
     rng=None,
     verbose=False,
+    solve=True,
 ) -> list[KnapsackPackingGame]:
     """
     Generate KnapsackPackingGame instances with a shared weights matrix.
@@ -114,9 +125,11 @@ def generate_payoff_problems(
         capacity (float | list[float] | list[list[float]] | None, optional): Fractional capacity of instances. Defaults to None.
         corr (bool, optional): Should weights and payoffs be correlated?. Defaults to True.
         inter_factor (int, optional): Denominator to limit the influence of interaction. Defaults to 3.
+        neg_inter (bool, optional): Allow for negative interactions. Defaults to False.
         approx_options (ApproxOptions | None, optional): How to deal with approximate solutions?. Defaults to None.
         rng (Generator | None, optional): Random number generator. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
+        solve (bool, optional): Solve all problems and check solvability. Defaults to True.
 
     Returns:
         list[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
@@ -150,7 +163,10 @@ def generate_payoff_problems(
             weights = rng.integers(1, r + 1, (n, m))
 
         interactions = rng.integers(0, int(r / inter_factor) + 1, (n, n, m))
-        mask = rng.integers(0, 2, (n, n, m))
+        if neg_inter:
+            mask = rng.integers(-1, 2, (n, n, m))
+        else:
+            mask = rng.integers(0, 2, (n, n, m))
         interactions = interactions * mask
 
         for i in range(n):
@@ -162,13 +178,17 @@ def generate_payoff_problems(
             interactions,
             list(capacity[len(problems)] * weights.sum(axis=1)),
         )
-        result = problem.solve(verbose, approx_options.timelimit)
 
-        if approx_options.valid_problem(result):
+        if solve:
+            result = problem.solve(verbose, approx_options.timelimit)
+
+            if approx_options.valid_problem(result):
+                problems.append(problem)
+
+            if len(problems) != 0 and len(problems) % 10 == 0:
+                print(f"{len(problems)} problems generated.")
+        else:
             problems.append(problem)
-
-        if len(problems) != 0 and len(problems) % 10 == 0:
-            print(f"{len(problems)} problems generated.")
 
     return problems
 
