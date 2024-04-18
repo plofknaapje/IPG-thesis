@@ -135,7 +135,6 @@ class KnapsackPackingGame:
         p_w_ratio = self.payoffs / self.weights
         initial_x = np.zeros_like(p_w_ratio)
         total_weight = np.zeros(self.n)
-        print(p_w_ratio)
 
         # Initial selection without interaction
         for p in self.players:
@@ -168,20 +167,26 @@ class KnapsackPackingGame:
         player: int,
         solution: np.ndarray | None = None,
         player_solution: np.ndarray | None = None,
+        payoffs: np.ndarray | None = None,
+        inter_coefs: np.ndarray | None = None,
     ) -> int:
         """
         Calculates the objective value for a player based on a given solution.
         If player_solution is not None, its used for the player.
         If solution is not None, it is used instead of self.solution.
+        Payoffs and inter_coefs replace self.payoffs and self.inter_coefs.
 
         Args:
             player (int): Index of the player.
             solution (np.ndarray | None, optional): Solution matrix. Defaults to None.
             player_solution (np.ndarray | None, optional): Player solution vector. Defaults to None.
+            payoffs (np.ndarray | None, optional): Replacement matrix. Defaults to None.
+            inter_coefs (np.ndarray | None, optional): Replacement matrix. Defaults to None.
 
         Returns:
-            int: Objective value of player under the given solution.
+            int: Objective value of player under the given solution, payoffs and inter_coefs.
         """
+
         if player_solution is not None:
             player_sol = player_solution
         elif solution is not None:
@@ -189,15 +194,20 @@ class KnapsackPackingGame:
         else:
             player_sol = self.solution[player]
 
+        if payoffs is None:
+            payoffs = self.payoffs
+        if inter_coefs is None:
+            inter_coefs = self.inter_coefs
+
         if solution is not None:
             others_sol = solution
         else:
             others_sol = self.solution
 
-        value = player_sol @ self.payoffs[player]
+        value = player_sol @ payoffs[player]
 
         for opp in self.opps[player]:
-            value += player_sol * others_sol[opp] @ self.inter_coefs[player, opp]
+            value += player_sol * others_sol[opp] @ inter_coefs[player, opp]
 
         return value
 
