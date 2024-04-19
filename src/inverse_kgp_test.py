@@ -13,49 +13,50 @@ from problems.base import ApproxOptions
 start = time()
 rng = np.random.default_rng(1)
 
-approach = "weight"
-options = ApproxOptions(allow_phi_ne=False, timelimit=15, allow_timelimit_reached=False)
+approach = "payoffs"
+options = ApproxOptions(allow_phi_ne=True, timelimit=10, allow_timelimit_reached=False)
 
+if approach == "weights":
+    weight_problems = generate_weight_problems(
+        50,
+        2,
+        20,
+        100,
+        0.5,
+        corr=True,
+        neg_inter=False,
+        approx_options=options,
+        rng=rng,
+        verbose=False,
+    )
+    print("Problem generation finished")
 
-match approach:
-    case "weight":
-        weight_problems = generate_weight_problems(
-            50,
-            2,
-            20,
-            100,
-            0.5,
-            corr=True,
-            approx_options=options,
-            rng=rng,
-            verbose=False,
-        )
-        print("Problem generation finished")
+    values = weight_problems[0].weights
 
-        values = weight_problems[0].weights
+    inverse = inverse_weights(weight_problems, verbose=False)
 
-        inverse = inverse_weights(weight_problems, verbose=False)
+elif approach == "payoffs":
+    payoff_problems = generate_payoff_problems(
+        100,
+        2,
+        10,
+        100,
+        [0.5, 0.5],
+        corr=True,
+        neg_inter=False,
+        approx_options=options,
+        rng=rng,
+        verbose=False,
+    )
 
-    case "payoff":
-        payoff_problems = generate_payoff_problems(
-            100,
-            2,
-            20,
-            100,
-            [0.5, 0.5],
-            corr=True,
-            approx_options=options,
-            rng=rng,
-            verbose=False,
-        )
+    print("Problem generation finished")
 
-        print("Problem generation finished")
+    values = payoff_problems[0].payoffs
 
-        values = payoff_problems[0].payoffs
+    inverse = inverse_payoffs(payoff_problems, verbose=False)
 
-        inverse = inverse_payoffs(payoff_problems, verbose=False)
-    case _:
-        raise ValueError("Unknown approach!")
+else:
+    raise ValueError("Unknown approach!")
 
 print(values)
 print(inverse)

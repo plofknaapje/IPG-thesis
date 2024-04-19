@@ -193,12 +193,15 @@ def generate_payoff_problems(
     return problems
 
 
-def inverse_weights(problems: list[KnapsackPackingGame], verbose=False) -> np.ndarray:
+def inverse_weights(
+    problems: list[KnapsackPackingGame], sub_timelimit: int | None = None, verbose=False
+) -> np.ndarray:
     """
     Determine the shared weights matrix of the problems using inverse optimization.
 
     Args:
         problems (list[KnapsackPackingGame]): KnapsackPackingGames with the same weights matrix.
+        sub_timelimit (int | Non e, optional): Soft timelimit for solving player problems. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
 
     Raises:
@@ -210,7 +213,7 @@ def inverse_weights(problems: list[KnapsackPackingGame], verbose=False) -> np.nd
     n = problems[0].n
     players = problems[0].players
     m = problems[0].m
-    true_value = {
+    true_objs = {
         (i, player): problem.obj_value(player)
         for i, problem in enumerate(problems)
         for player in players
@@ -222,7 +225,7 @@ def inverse_weights(problems: list[KnapsackPackingGame], verbose=False) -> np.nd
 
     model.setObjective(w.sum())
 
-    model.addConstrs(w[j].sum() >= problems[0].weights[j].sum() for j in players)
+    # model.addConstrs(w[j].sum() >= problems[0].weights[j].sum() for j in players)
 
     for problem in problems:
         for j in players:
@@ -239,11 +242,13 @@ def inverse_weights(problems: list[KnapsackPackingGame], verbose=False) -> np.nd
 
         for i, problem in enumerate(problems):
             for j in players:
-                new_solution = problem.solve_player(j, weights=w.X)
-                new_value = problem.obj_value(j, player_solution=new_solution)
+                new_player_x = problem.solve_player(
+                    j, weights=w.X, timelimit=sub_timelimit
+                )
+                new_player_obj = problem.obj_value(j, player_solution=new_player_x)
 
-                if new_value >= true_value[i, j] + eps:
-                    model.addConstr(new_solution @ w[j] >= problem.capacity[j] + eps)
+                if new_player_obj >= true_objs[i, j] + eps:
+                    model.addConstr(new_player_x @ w[j] >= problem.capacity[j] + eps)
                     new_constraint = True
 
         if not new_constraint:
@@ -268,13 +273,16 @@ def inverse_weights(problems: list[KnapsackPackingGame], verbose=False) -> np.nd
     return inverse.astype(int)
 
 
-def inverse_payoffs(problems: list[KnapsackPackingGame], verbose=False) -> np.ndarray:
+def inverse_payoffs(
+    problems: list[KnapsackPackingGame], sub_timelimit: int | None = None, verbose=False
+) -> np.ndarray:
     """
     Determine the shared payoffs matrix of the problems using inverse optimization.
     Combines the delta and direct method.
 
     Args:
         problems (list[KnapsackPackingGame]): KnapsackPackingGames with the same payoffs matrix.
+        sub_timelimit (int | Non e, optional): Soft timelimit for solving player problems. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
 
     Raises:
@@ -284,20 +292,20 @@ def inverse_payoffs(problems: list[KnapsackPackingGame], verbose=False) -> np.nd
         np.ndarray: The inversed payoffs matrix.
     """
     n_problems = len(problems)
-    n = problems[0].n
+    n_players = problems[0].n
     players = problems[0].players
-    m = problems[0].m
+    n_items = problems[0].m
 
     model = gp.Model("Inverse KPG (Weights)")
 
-    delta = model.addMVar((n_problems, n), name="delta")
-    p = model.addMVar((n, m), vtype=GRB.INTEGER, name="p")
+    delta = model.addMVar((n_problems, n_players), name="delta")
+    p = model.addMVar((n_players, n_items), vtype=GRB.INTEGER, name="p")
 
     model.setObjective(delta.sum())
 
-    model.addConstrs(p[j].sum() <= problems[0].payoffs[j].sum() for j in players)
+    # model.addConstrs(p[j].sum() <= problems[0].payoffs[j].sum() for j in players)
 
-    true_values = {
+    true_objs = {
         (i, j): problem.solution[j] @ p[j]
         + sum(
             problem.solution[j] * problem.solution[o] @ problem.inter_coefs[j, o]
@@ -320,32 +328,19 @@ def inverse_payoffs(problems: list[KnapsackPackingGame], verbose=False) -> np.nd
 
         for i, problem in enumerate(problems):
             for j in players:
-                new_solution = problem.solve_player(j, payoffs=p.X)
-                if tuple(new_solution) in solutions[i, j]:
+                new_player_x = problem.solve_player(
+                    j, payoffs=p.X, timelimit=sub_timelimit
+                )
+                if tuple(new_player_x) in solutions[i, j]:
                     continue
 
-                new_value = new_solution @ p[j] + sum(
-                    new_solution * problem.solution[o] @ problem.inter_coefs[j, o]
+                new_player_obj = new_player_x @ p[j] + sum(
+                    new_player_x * problem.solution[o] @ problem.inter_coefs[j, o]
                     for o in problem.opps[j]
                 )
-                model.addConstr(delta[i, j] >= new_value - true_values[i, j])
+                model.addConstr(delta[i, j] >= new_player_obj - true_objs[i, j])
                 new_constraint = True
-                solutions[i, j].add(tuple(new_solution))
-
-                # temp_new_value = new_solution @ p.X[j] + sum(
-                #     new_solution * problem.solution[o] @ problem.inter_coefs[j, o]
-                #     for o in problem.opps[j]
-                # )
-
-                # temp_true_value = problem.solution[j] @ p.X[j] + sum(
-                #     problem.solution[j]
-                #     * problem.solution[o]
-                #     @ problem.inter_coefs[j, o]
-                #     for o in problem.opps[j]
-                # )
-
-                # if temp_new_value >= temp_true_value + eps:
-                #     model.addConstr(new_value <= true_values[i, j])
+                solutions[i, j].add(tuple(new_player_x))
 
         if not new_constraint:
             break
