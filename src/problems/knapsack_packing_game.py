@@ -7,7 +7,7 @@ import gurobipy as gp
 from gurobipy import GRB
 
 from problems.utils import powerset
-from problems.base import IPGResult
+from problems.base import IPGResult, early_stopping
 
 eps = 0.001
 
@@ -82,45 +82,63 @@ class KnapsackPackingGame:
             print("Already solved")
             return self.result
 
-        self.result = zero_regrets_kpg(self, verbose, timelimit)
+        self.result = zero_regrets_kpg(self, timelimit, verbose)
         self.solution = self.result.X
         return self.result
 
     def solve_player(
         self,
         player: int,
-        solution: np.ndarray | None = None,
+        current_sol: np.ndarray | None = None,
         weights: np.ndarray | None = None,
         payoffs: np.ndarray | None = None,
         inter_coefs: np.ndarray | None = None,
+        timelimit: int | None = None,
     ) -> np.ndarray:
-        if solution is None:
+        if current_sol is None:
             if self.solution is None:
                 raise ValueError("KPG was not yet solved!")
             solution = self.solution
+        else:
+            solution = current_sol
+
         if weights is None:
-            weights = self.weights
+            w = self.weights
+        else:
+            w = weights
+
         if payoffs is None:
-            payoffs = self.payoffs
+            p = self.payoffs
+        else:
+            p = payoffs
+
         if inter_coefs is None:
-            inter_coefs = self.inter_coefs
+            ic = self.inter_coefs
+        else:
+            ic = inter_coefs
+        
 
         model = gp.Model("KPG player")
 
         x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
 
         model.setObjective(
-            x @ payoffs[player]
+            x @ p[player]
             + gp.quicksum(
-                x * solution[opp] @ inter_coefs[player, opp]
+                x * solution[opp] @ ic[player, opp]
                 for opp in self.opps[player]
             ),
             GRB.MAXIMIZE,
         )
 
-        model.addConstr(x @ weights[player] <= self.capacity[player])
+        model.addConstr(x @ w[player] <= self.capacity[player])
 
-        model.optimize()
+        if timelimit is None:
+            model.optimize()
+        else:
+            model._timelimit = timelimit
+            model._current_obj = self.obj_value(player, solution)
+            model.optimize(early_stopping)
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
@@ -281,7 +299,7 @@ def read_file(file: str) -> KnapsackPackingGame:
 
 
 def zero_regrets_kpg(
-    kpg: KnapsackPackingGame, verbose=False, timelimit: int | None = None
+    kpg: KnapsackPackingGame,  timelimit: int | None = None, verbose=False
 ) -> IPGResult:
     """
     Solves kpg using the ZeroRegrets methods of cutting.
@@ -391,7 +409,7 @@ def zero_regrets_kpg(
         for p in kpg.players:
             player_obj = kpg.obj_value(p, solution=current_x)
 
-            new_player_x = kpg.solve_player(p, solution=current_x)
+            new_player_x = kpg.solve_player(p, solution=current_x, timelimit=1)
             if tuple(new_player_x) in solutions[p]:
                 continue
 
@@ -433,6 +451,7 @@ def zero_regrets_kpg(
         if timelimit is None:
             continue
         elif time() - start >= timelimit:
+            print("Timelimit reached!")
             pne = False
             result = x.X
             objval = model.ObjVal

@@ -111,7 +111,7 @@ def generate_payoff_range_problems(
     payoffs = np.arange(1, n_items + 1)
     rng.shuffle(payoffs)
 
-    if type(capacity) is float:
+    if isinstance(capacity, float):
         capacity = np.ones(n_problems) * capacity
 
     for i in range(n_problems):
@@ -154,17 +154,17 @@ def inverse_weights(
         new_constraint = False
 
         for i, problem in enumerate(problems):
-            new_solution = problem.solve_weights(w.X)
-            new_value = new_solution @ problem.payoffs
+            new_x = problem.solve(weights=w.X)
+            new_obj = new_x @ problem.payoffs
 
-            if new_value < true_value[i] and trim_lower:
-                selected_sum = new_solution @ w.X
-                model.addConstr(new_solution @ w >= selected_sum + 1)
+            if new_obj < true_value[i] and trim_lower:
+                selected_sum = new_x @ w.X
+                model.addConstr(new_x @ w >= selected_sum + 1)
 
-            elif new_value <= true_value[i]:
+            elif new_obj <= true_value[i]:
                 continue
             else:
-                model.addConstr(new_solution @ w >= problem.capacity + 1)
+                model.addConstr(new_x @ w >= problem.capacity + 1)
 
             new_constraint = True
 
@@ -213,9 +213,9 @@ def inverse_payoffs(
         new_constraint = False
 
         for i, problem in enumerate(problems):
-            new_solution = problem.solve_payoffs(p.X)
+            new_x = problem.solve(payoffs=p.X)
 
-            if new_solution @ p.X <= problem.solution @ p.X:
+            if new_x @ p.X <= problem.solution @ p.X:
                 continue
 
             if verbose:
@@ -225,12 +225,12 @@ def inverse_payoffs(
                     problem.solution @ p.X,
                     problem.solution @ problem.payoffs,
                 )
-                print(new_solution, new_solution @ p.X)
+                print(new_x, new_x @ p.X)
                 print(problem.payoffs)
                 print(p.X)
 
             new_constraint = True
-            model.addConstr(problem.solution @ p >= new_solution @ p)
+            model.addConstr(problem.solution @ p >= new_x @ p)
 
         if not new_constraint:
             break
@@ -277,22 +277,22 @@ def inverse_delta_payoffs(
         new_constraint = False
 
         for i, problem in enumerate(problems):
-            new_solution = problem.solve_payoffs(p.X)
+            new_x = problem.solve(payoffs=p.X)
 
-            if new_solution @ p.X <= problem.solution @ p.X:
+            if new_x @ p.X <= problem.solution @ p.X:
                 continue
 
-            if duplicate_array(solutions[i], new_solution):
+            if duplicate_array(solutions[i], new_x):
                 continue
 
             if verbose:
-                print(i, new_solution)
+                print(i, new_x)
                 print(problem.solution)
                 print()
             new_constraint = True
 
-            model.addConstr(delta[i] >= new_solution @ p)
-            solutions[i].append(new_solution)
+            model.addConstr(delta[i] >= new_x @ p)
+            solutions[i].append(new_x)
 
         if not new_constraint:
             break
@@ -335,7 +335,7 @@ def inverse_direct_payoffs(
         new_constraint = False
 
         for i, problem in enumerate(problems):
-            new_solution = problem.solve_payoffs(p.X)
+            new_solution = problem.solve(payoffs=p.X)
 
             if new_solution @ p.X <= problem.solution @ p.X:
                 continue
@@ -382,7 +382,7 @@ def inverse_wang_payoffs(
 
         for i, problem in enumerate(problems):
             p = base_vector + h.X - l.X
-            new_solution = problem.solve_payoffs(p)
+            new_solution = problem.solve(payoffs=p)
 
             if new_solution @ p <= problem.solution @ p:
                 continue

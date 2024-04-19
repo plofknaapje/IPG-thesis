@@ -23,11 +23,15 @@ class KnapsackProblem:
         self.solution = None  # Lazy class. Call self.solve() to solve.
         self.n = len(payoffs)
 
-    def solve(self) -> np.ndarray:
+    def solve(self, payoffs: np.ndarray | None = None, weights: np.ndarray | None = None) -> np.ndarray:
         """
         Solves the Knapsack Problem maximising x @ self.payoffs constrained by
         x @ self.weights <= self.capacity where the vector x is binary.
         The function also updates self.solution if that was still None.
+
+        Args:
+            payoffs (np.ndarray | None, optional): A replacement payoffs vector. Defaults to None.
+            weights (np.ndarray | None, optional): A replacement weights vector. Defaults to None.
 
         Raises:
             ValueError: The KP is infeasible.
@@ -35,17 +39,28 @@ class KnapsackProblem:
         Returns:
             np.ndarray: An optimal solution to the KP.
         """
+
         if self.solution is not None:
             print("Already solved")
             return self.solution
+        
+        if payoffs is None:
+            p = self.payoffs
+        else:
+            p = payoffs
+
+        if weights is None:
+            w = self.weights
+        else:
+            w = weights
 
         model = gp.Model("Knapsack Problem")
 
         x = model.addMVar((self.n), vtype=GRB.BINARY, name="x")
 
-        model.setObjective(x @ self.payoffs, GRB.MAXIMIZE)
+        model.setObjective(x @ p, GRB.MAXIMIZE)
 
-        model.addConstr(x @ self.weights <= self.capacity)
+        model.addConstr(x @ w <= self.capacity)
 
         model.optimize()
 
@@ -54,62 +69,6 @@ class KnapsackProblem:
 
         self.solution = x.X
         return self.solution
-
-    def solve_weights(self, weights: np.ndarray) -> np.ndarray:
-        """
-        Solves the KP with provided weights vector.
-
-        Args:
-            weights (np.ndarray): A replacement weights vector.
-
-        Raises:
-            ValueError: The KP is infeasible.
-
-        Returns:
-            np.ndarray: An optimal solution to the KP.
-        """
-        model = gp.Model("Knapsack Problem")
-
-        x = model.addMVar((self.n), vtype=GRB.BINARY, name="x")
-
-        model.setObjective(x @ self.payoffs, GRB.MAXIMIZE)
-
-        model.addConstr(x @ weights <= self.capacity)
-
-        model.optimize()
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible!")
-
-        return x.X
-
-    def solve_payoffs(self, payoffs: np.ndarray) -> np.ndarray:
-        """
-        Solves the KP with a provided payoffs vector.
-
-        Args:
-            payoffs (np.ndarray): A replacement payoffs vector.
-
-        Raises:
-            ValueError: The KP is infeasible.
-
-        Returns:
-            np.ndarray: An optimal solution to the KP.
-        """
-        model = gp.Model("Knapsack Problem")
-
-        x = model.addMVar((self.n), vtype=GRB.BINARY, name="x")
-
-        model.setObjective(x @ payoffs, GRB.MAXIMIZE)
-
-        model.addConstr(x @ self.weights <= self.capacity)
-
-        model.optimize()
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible!")
-
-        return x.X
 
     def solve_greedy(self) -> np.ndarray:
         """

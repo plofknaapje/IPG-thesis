@@ -6,7 +6,7 @@ from gurobipy import GRB
 import numpy as np
 from numpy.random import Generator
 
-from problems.base import IPGResult
+from problems.base import IPGResult, early_stopping
 
 
 @dataclass
@@ -101,14 +101,14 @@ class AttackerDefenderGame:
         self.success = parameters.success
         self.normal = parameters.normal
 
-    def solve(self, verbose=False, timelimit: int | None = None) -> IPGResult:
+    def solve(self, timelimit: int | None = None, verbose=False) -> IPGResult:
         """
         Solve the KPG using zero_regrets(). Sets self.solution if this was None.
         Sets self.result too, which records the information of the solution.
 
         Args:
-            verbose (bool, optional): Verbose progress reports. Defaults to False.
             timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
+            verbose (bool, optional): Verbose progress reports. Defaults to False.
 
         Returns:
             IPGResult: Object with all solving information.
@@ -117,55 +117,88 @@ class AttackerDefenderGame:
             print("Problem was already solved")
             return self.result
 
-        self.result = zero_regrets_adg(self, verbose, timelimit)
+        self.result = zero_regrets_adg(self, timelimit, verbose)
         self.solution = self.result.X
         return self.result
 
-    def solve_player(self, defender: bool, current_sol: np.ndarray) -> np.ndarray:
+    def solve_player(
+        self,
+        defender: bool,
+        current_sol: np.ndarray | None = None,
+        weights: np.ndarray | None = None,
+        payoffs: np.ndarray | None = None,
+        timelimit: int | None = None,
+    ) -> np.ndarray:
         """
         Solve the partial problem for a single player given the current solution.
 
         Args:
             defender (bool): Solve for the defender.
             current_sol (np.ndarray): Matrix of current solution.
+            weights (np.ndarray | None, optional): Replacement weights matrix. Defaults to None.
+            payoffs (np.ndarray | None, optional): Replacement payoff matrix. Defaults to None.
+            timelimit (int | None, optional): Soft timelimit for improvement. Defaults to None.
 
         Raises:
             ValueError: Problem is infeasible.
         Returns:
             np.ndarray: Optimal solution for the player.
         """
+        if current_sol is None:
+            solution = self.solution
+        else:
+            solution = current_sol
+
+        if weights is None:
+            w = self.weights
+        else:
+            w = weights
+        
+        if payoffs is None:
+            p = self.payoffs
+        else:
+            p = payoffs
+
         model = gp.Model("ADG player")
 
         x = model.addMVar((self.n), vtype=GRB.BINARY, name="x")
 
         if defender:
-            opp_sol = current_sol[1]
+            attack = solution[1]
             model.setObjective(
-                self.payoffs[0]
+                p[0]
                 @ (
-                    (1 - x) * (1 - opp_sol)
-                    + self.mitigated * x * opp_sol
-                    + self.overcommit * x * (1 - opp_sol)
-                    + self.success * (1 - x) * opp_sol
+                    (1 - x) * (1 - attack)
+                    + self.mitigated * x * attack
+                    + self.overcommit * x * (1 - attack)
+                    + self.success * (1 - x) * attack
                 ),
                 GRB.MAXIMIZE,
             )
 
-            model.addConstr(self.weights[0] @ x <= self.capacity[0])
+            model.addConstr(w[0] @ x <= self.capacity[0])
         else:
-            opp_sol = current_sol[0]
+            defence = solution[0]
             model.setObjective(
-                self.payoffs[1]
+                p[1]
                 @ (
-                    -self.normal * (1 - opp_sol) * (1 - x)
-                    + (1 - opp_sol) * x
-                    + (1 - self.mitigated) * opp_sol * x
+                    -self.normal * (1 - defence) * (1 - x)
+                    + (1 - defence) * x
+                    + (1 - self.mitigated) * defence * x
                 ),
                 GRB.MAXIMIZE,
             )
-            model.addConstr(self.weights[1] @ x <= self.capacity[1])
+            model.addConstr(w[1] @ x <= self.capacity[1])
 
-        model.optimize()
+        if timelimit is None:
+            model.optimize()
+        else:
+            model._timelimit = timelimit
+            model._current_obj = self.obj_value(
+                defender, current_sol[0], current_sol[1]
+            )
+
+            model.optimize(early_stopping)
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
@@ -178,9 +211,10 @@ class AttackerDefenderGame:
 
     def obj_value(
         self,
-        defender: True,
+        defender: bool,
         def_sol: np.ndarray | None = None,
         att_sol: np.ndarray | None = None,
+        payoffs: np.ndarray | None = None,
     ) -> float:
         """
         Calculate the objective value for defender or attacker. If def_sol or att_sol is not given, self.solution is used.
@@ -189,32 +223,33 @@ class AttackerDefenderGame:
             defender (True): Calculate for the defender?
             def_sol (np.ndarray | None, optional): Defender solution. Defaults to None.
             att_sol (np.ndarray | None, optional): Attacker solution. Defaults to None.
+            payoffs (np.ndarray | None, optional): Replacement payoff matrix. Defaults to None.
 
         Returns:
             float: Objective function value for the selected player.
         """
         if def_sol is None:
-            defender = self.solution[0]
+            defence = self.solution[0]
         else:
-            defender = def_sol
+            defence = def_sol
 
         if att_sol is None:
-            attacker = self.solution[1]
+            attack = self.solution[1]
         else:
-            attacker = att_sol
+            attack = att_sol
 
         if defender:  # Defender
             return self.payoffs[0] @ (
-                (1 - defender) * (1 - attacker)
-                + self.mitigated * defender * attacker
-                + self.overcommit * defender * (1 - attacker)
-                + self.success * (1 - defender) * attacker
+                (1 - defence) * (1 - attack)
+                + self.mitigated * defence * attack
+                + self.overcommit * defence * (1 - attack)
+                + self.success * (1 - defence) * attack
             )
         else:  # Attacker
             return self.payoffs[1] @ (
-                -self.normal * (1 - defender) * (1 - attacker)
-                + (1 - defender) * attacker
-                + (1 - self.mitigated) * defender * attacker
+                -self.normal * (1 - defence) * (1 - attack)
+                + (1 - defence) * attack
+                + (1 - self.mitigated) * defence * attack
             )
 
 
@@ -246,15 +281,15 @@ def generate_random_ADG(
 
 
 def zero_regrets_adg(
-    adg: AttackerDefenderGame, verbose=False, timelimit: int | None = None
+    adg: AttackerDefenderGame, timelimit: int | None = None, verbose=False
 ) -> IPGResult:
     """
     Solves the AttackerDefenderGame instance to a PNE if possible and otherwise to a phi-NE.
 
     Args:
         adg (AttackerDefenderGame): Problem instance.
-        verbose (bool, optional): Verbally report progress. Defaults to False.
         timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
+        verbose (bool, optional): Verbally report progress. Defaults to False.
 
     Raises:
         ValueError: Problem is infeasible.
@@ -328,20 +363,18 @@ def zero_regrets_adg(
     while True:
         new_constraint = False
         current_x = x.X
-        obj = model.ObjVal
+        current_obj = model.ObjVal
 
         # Defender
-        def_obj = def_obj.getValue()
-        new_def_x = adg.solve_player(True, x.X)
+        new_def_x = adg.solve_player(True, x.X, timelimit=1)
         new_def_obj = adg.obj_value(True, new_def_x, attacker.X)
 
         # Attacker
-        att_obj = att_obj.getValue()
-        new_att_x = adg.solve_player(False, x.X)
+        new_att_x = adg.solve_player(False, x.X, timelimit=1)
         new_att_obj = adg.obj_value(False, defender.X, new_att_x)
 
         if (
-            def_obj + phi_ub <= new_def_obj
+            def_obj.getValue() + phi_ub <= new_def_obj
             and tuple(new_def_x) not in defender_solutions
         ):
             model.addConstr(
@@ -358,7 +391,7 @@ def zero_regrets_adg(
             new_constraint = True
 
         if (
-            att_obj + phi_ub <= new_att_obj
+            att_obj.getValue() + phi_ub <= new_att_obj
             and tuple(new_att_x) not in attacker_solutions
         ):
             model.addConstr(
@@ -390,6 +423,7 @@ def zero_regrets_adg(
         if timelimit is None:
             continue
         elif time() - start >= timelimit:
+            print("Timelimit reached!")
             pne = False
             result = x.X
             objval = model.ObjVal
@@ -400,7 +434,7 @@ def zero_regrets_adg(
     if phi_ub >= 1:
         pne = False
         result = current_x
-        objval = obj
+        objval = current_obj
         phi = phi.X
     else:
         pne = True
