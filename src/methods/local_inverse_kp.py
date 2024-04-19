@@ -80,7 +80,7 @@ def local_inverse_weights(problem: KnapsackProblem) -> np.ndarray:
         raise ValueError("Problem is Infeasible!")
 
     while True:
-        new_solution = problem.solve_weights(w.X)
+        new_solution = problem.solve(weights=w.X)
 
         if new_solution @ problem.payoffs >= greedy_solution @ problem.payoffs + eps:
             model.addConstr(new_solution @ w >= problem.capacity + eps)
@@ -134,7 +134,7 @@ def local_inverse_payoffs(problem: KnapsackProblem) -> np.ndarray:
     while True:
         # new_payoffs = problem.payoffs - e.X + f.X
         new_payoffs = p.X
-        new_solution = problem.solve_payoffs(new_payoffs)
+        new_solution = problem.solve(payoffs=new_payoffs)
 
         if new_payoffs @ new_solution <= new_payoffs @ greedy_solution:
             print("Solution is now optimal")

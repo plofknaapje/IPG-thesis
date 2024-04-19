@@ -124,7 +124,7 @@ def inverse_weights(problems: list[KnapsackProblem], verbose=False) -> np.ndarra
         np.ndarray: The inversed weights vector.
     """
     n = problems[0].n
-    true_value = [problem.solution @ problem.payoffs for problem in problems]
+    true_obj = [problem.solution @ problem.payoffs for problem in problems]
 
     model = gp.Model("Inverse Knapsack (Weights)")
 
@@ -147,11 +147,11 @@ def inverse_weights(problems: list[KnapsackProblem], verbose=False) -> np.ndarra
         current_w = w.X
 
         for i, problem in enumerate(problems):
-            new_solution = problem.solve_weights(w.X)
-            new_value = new_solution @ problem.payoffs
+            new_x = problem.solve(weights=w.X)
+            new_obj = new_x @ problem.payoffs
 
-            if new_value >= true_value[i] + eps:
-                model.addConstr(new_solution @ w >= problem.capacity + eps)
+            if new_obj >= true_obj[i] + eps:
+                model.addConstr(new_x @ w >= problem.capacity + eps)
                 new_constraint = True
 
         if not new_constraint:
@@ -215,12 +215,12 @@ def inverse_payoffs_direct(
         current_p = p.X
 
         for _, problem in enumerate(problems):
-            new_solution = problem.solve_payoffs(p.X)
-            new_value = new_solution @ p.X
-            true_value = problem.solution @ p.X
+            new_x = problem.solve(payoffs=p.X)
+            new_obj = new_x @ p.X
+            true_obj = problem.solution @ p.X
 
-            if new_value >= true_value + eps:
-                model.addConstr(problem.solution @ p >= new_solution @ p)
+            if new_obj >= true_obj + eps:
+                model.addConstr(problem.solution @ p >= new_x @ p)
                 new_constraint = True
 
         if not new_constraint:
@@ -285,12 +285,12 @@ def inverse_payoffs_delta(problems: list[KnapsackProblem], verbose=False) -> np.
         current_p = p.X
 
         for i, problem in enumerate(problems):
-            new_solution = problem.solve_payoffs(p.X)
-            if tuple(new_solution) in solutions[i]:
+            new_x = problem.solve(payoffs=p.X)
+            if tuple(new_x) in solutions[i]:
                 continue
-            model.addConstr(delta[i] >= new_solution @ p - problem.solution @ p)
+            model.addConstr(delta[i] >= new_x @ p - problem.solution @ p)
             new_constraint = True
-            solutions[i].add(tuple(new_solution))
+            solutions[i].add(tuple(new_x))
 
         if not new_constraint:
             break
@@ -355,20 +355,20 @@ def inverse_payoffs_hybrid(
         current_p = p.X
 
         for i, problem in enumerate(problems):
-            new_solution = problem.solve_payoffs(p.X)
+            new_x = problem.solve(payoffs=p.X)
 
-            new_value = new_solution @ p.X
+            new_obj = new_x @ p.X
             true_value = problem.solution @ p.X
 
-            if new_value >= true_value + eps:
-                model.addConstr(problem.solution @ p >= new_solution @ p)
+            if new_obj >= true_value + eps:
+                model.addConstr(problem.solution @ p >= new_x @ p)
 
-            if tuple(new_solution) in solutions[i]:
+            if tuple(new_x) in solutions[i]:
                 continue
 
-            model.addConstr(delta[i] >= new_solution @ p - problem.solution @ p)
+            model.addConstr(delta[i] >= new_x @ p - problem.solution @ p)
             new_constraint = True
-            solutions[i].add(tuple(new_solution))
+            solutions[i].add(tuple(new_x))
 
         if not new_constraint:
             break
