@@ -117,7 +117,7 @@ def inverse_payoffs(
 
     model.setObjective(delta.sum())
 
-    model.addConstrs(p[j].sum() <= problems[0].payoffs[j].sum() for j in [0, 1])
+    model.addConstrs(p[j].sum() == problems[0].payoffs[j].sum() for j in [0, 1])
 
     true_objs = {}
 
