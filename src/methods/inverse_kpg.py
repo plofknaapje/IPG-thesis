@@ -221,7 +221,7 @@ def inverse_weights(
 
     model = gp.Model("Inverse KPG (Weights)")
 
-    w = model.addMVar((n, m), vtype=GRB.INTEGER, name="w")
+    w = model.addMVar((n, m), vtype=GRB.INTEGER, lb=1, name="w")
 
     model.setObjective(w.sum())
 
@@ -299,7 +299,7 @@ def inverse_payoffs(
     model = gp.Model("Inverse KPG (Weights)")
 
     delta = model.addMVar((n_problems, n_players), name="delta")
-    p = model.addMVar((n_players, n_items), vtype=GRB.INTEGER, name="p")
+    p = model.addMVar((n_players, n_items), vtype=GRB.INTEGER, lb=1, name="p")
 
     model.setObjective(delta.sum())
 

@@ -14,7 +14,7 @@ if approach == "weights":
     problems = generate_weight_problems(50, 10, rng=rng, approx_options=approx_options)
     original = problems[0].weights
 elif approach == "payoffs":
-    problems = generate_payoff_problems(200, 10, rng=rng, approx_options=approx_options)
+    problems = generate_payoff_problems(100, 10, rng=rng, approx_options=approx_options)
     original = problems[0].payoffs
     inverse = inverse_payoffs(problems, learn_defence=False, sub_timelimit=1, verbose=True)
 

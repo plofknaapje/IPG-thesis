@@ -128,7 +128,7 @@ def inverse_weights(problems: list[KnapsackProblem], verbose=False) -> np.ndarra
 
     model = gp.Model("Inverse Knapsack (Weights)")
 
-    w = model.addMVar((n), vtype=GRB.INTEGER, name="w")
+    w = model.addMVar((n), vtype=GRB.INTEGER, lb=1, name="w")
 
     model.setObjective(w.sum())
 
@@ -197,7 +197,7 @@ def inverse_payoffs_direct(
 
     model = gp.Model("Inverse Knapsack (Payoffs)")
 
-    p = model.addMVar((n), vtype=GRB.INTEGER, name="p")
+    p = model.addMVar((n), vtype=GRB.INTEGER, lb=1, name="p")
 
     model.setObjective(
         gp.quicksum(p @ problem.solution for problem in problems), GRB.MAXIMIZE
@@ -267,7 +267,7 @@ def inverse_payoffs_delta(problems: list[KnapsackProblem], verbose=False) -> np.
     model = gp.Model("Inverse Knapsack (Payoffs)")
 
     delta = model.addMVar((n_problems), name="delta")
-    p = model.addMVar((n), vtype=GRB.INTEGER, name="p")
+    p = model.addMVar((n), vtype=GRB.INTEGER, lb=1, name="p")
 
     model.setObjective(delta.sum())
 
@@ -337,7 +337,7 @@ def inverse_payoffs_hybrid(
     model = gp.Model("Inverse Knapsack (Payoffs)")
 
     delta = model.addMVar((n_problems), name="delta")
-    p = model.addMVar((n), vtype=GRB.INTEGER, name="p")
+    p = model.addMVar((n), vtype=GRB.INTEGER, lb=1, name="p")
 
     model.setObjective(delta.sum())
 

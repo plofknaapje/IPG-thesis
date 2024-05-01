@@ -2,7 +2,7 @@ from time import time
 
 import numpy as np
 
-from methods.inverse_kp import *
+from methods.inverse_kp import generate_payoff_problems, generate_weight_problems, inverse_payoffs_delta, inverse_weights
 
 start = time()
 rng = np.random.default_rng(0)

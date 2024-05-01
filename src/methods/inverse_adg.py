@@ -102,7 +102,7 @@ def inverse_payoffs(
     model = gp.Model("Inverse ADG (Payoffs)")
 
     delta = model.addMVar((n_problems, 2), name="delta")
-    p = model.addMVar((2, n_items), vtype=GRB.INTEGER, name="p")
+    p = model.addMVar((2, n_items), vtype=GRB.INTEGER, lb=1, name="p")
 
     if not learn_defence:
         for i in range(n_items):
@@ -117,7 +117,7 @@ def inverse_payoffs(
 
     model.setObjective(delta.sum())
 
-    model.addConstrs(p[j].sum() == problems[0].payoffs[j].sum() for j in [0, 1])
+    # model.addConstrs(p[j].sum() == problems[0].payoffs[j].sum() for j in [0, 1])
 
     true_objs = {}
 

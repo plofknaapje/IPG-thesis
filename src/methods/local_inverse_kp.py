@@ -65,8 +65,8 @@ def local_inverse_weights(problem: KnapsackProblem) -> np.ndarray:
 
     model = gp.Model("Local Inverse Weights")
 
-    w = model.addMVar((problem.n), vtype=GRB.INTEGER, lb=0)
-    delta = model.addMVar((problem.n), lb=0)
+    w = model.addMVar((problem.n), vtype=GRB.INTEGER, lb=1)
+    delta = model.addMVar((problem.n))
 
     model.setObjective(delta.sum())
 
@@ -115,7 +115,7 @@ def local_inverse_payoffs(problem: KnapsackProblem) -> np.ndarray:
     model = gp.Model("Local Inverse Payoffs")
 
     y = model.addMVar((problem.n), lb=0, vtype=GRB.INTEGER)
-    p = model.addMVar((problem.n), vtype=GRB.INTEGER)
+    p = model.addMVar((problem.n), vtype=GRB.INTEGER, lb=1)
     delta = model.addMVar((problem.n))
 
     model.setObjective(delta.sum())
