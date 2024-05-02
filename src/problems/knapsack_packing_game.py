@@ -116,7 +116,7 @@ class KnapsackPackingGame:
             ic = self.inter_coefs
         else:
             ic = inter_coefs
-        
+
 
         model = gp.Model("KPG player")
 
@@ -339,9 +339,7 @@ def zero_regrets_kpg(
             if p1 > p2:
                 model.addConstr(z[p1, p2, j] == z[p2, p1, j])
                 continue
-            model.addConstr(z[p1, p2, j] <= x[p1, j])
-            model.addConstr(z[p1, p2, j] <= x[p2, j])
-            model.addConstr(z[p1, p2, j] >= x[p1, j] + x[p2, j] - 1)
+            model.addConstr(z[p1, p2, j] == gp.and_(x[p1, j], x[p2, j]))
 
     # If the highest possible value of an item k is lower than the lowest possible
     # value of an item j, then item j dominates item k.
@@ -409,7 +407,7 @@ def zero_regrets_kpg(
         for p in kpg.players:
             player_obj = kpg.obj_value(p, solution=current_x)
 
-            new_player_x = kpg.solve_player(p, solution=current_x, timelimit=1)
+            new_player_x = kpg.solve_player(p, current_sol=current_x, timelimit=1)
             if tuple(new_player_x) in solutions[p]:
                 continue
 
