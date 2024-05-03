@@ -121,8 +121,8 @@ def local_inverse_payoffs(problem: KnapsackProblem) -> np.ndarray:
     model.setObjective(delta.sum())
 
     model.addConstrs(y[i] * problem.weights[i] >= p[i] for i in i_range)
-    model.addConstrs(delta[i] == gp.abs_(p[i] - problem.payoffs[i]) for i in i_range)
-    # model.addConstrs(delta[i] >= problem.payoffs[i] - p[i] for i in i_range)
+    model.addConstrs(delta[i] >= p[i] - problem.payoffs[i] for i in i_range)
+    model.addConstrs(delta[i] >= problem.payoffs[i] - p[i] for i in i_range)
 
     model.optimize()
 
@@ -132,6 +132,7 @@ def local_inverse_payoffs(problem: KnapsackProblem) -> np.ndarray:
     solutions = set()
 
     while True:
+        # new_payoffs = problem.payoffs - e.X + f.X
         new_payoffs = p.X
         new_solution = problem.solve(payoffs=new_payoffs)
 
@@ -153,3 +154,4 @@ def local_inverse_payoffs(problem: KnapsackProblem) -> np.ndarray:
             raise ValueError("Problem is Infeasible!")
 
     return p.X.astype(int)
+    # return (problem.payoffs - e.X + f.X).astype(int)
