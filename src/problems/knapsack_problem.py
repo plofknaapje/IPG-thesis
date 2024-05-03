@@ -40,10 +40,10 @@ class KnapsackProblem:
             np.ndarray: An optimal solution to the KP.
         """
 
-        if self.solution is not None and payoffs is None and weights is None:
+        if self.solution is not None:
             print("Already solved")
             return self.solution
-
+        
         if payoffs is None:
             p = self.payoffs
         else:
