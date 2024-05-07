@@ -1,6 +1,6 @@
 import numpy as np
 
-from methods.inverse_adg import generate_payoff_problems, generate_weight_problems, inverse_payoffs
+from methods.inverse_cng import generate_payoff_problems, generate_weight_problems, inverse_payoffs
 from problems.base import ApproxOptions
 
 rng = np.random.default_rng(42)

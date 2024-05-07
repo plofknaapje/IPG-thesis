@@ -72,12 +72,10 @@ def generate_weight_problems(
         else:
             payoffs = rng.integers(1, r + 1, (n, m))
 
-        interactions = rng.integers(1, int(r / inter_factor) + 1, (n, n, m))
         if neg_inter:
-            mask = rng.integers(-1, 2, (n, n, m))
+            interactions = rng.integers(- np.floor(r / inter_factor), np.floor(r / inter_factor) + 1, (n, n, m))
         else:
-            mask = rng.integers(0, 2, (n, n, m))
-        interactions = interactions * mask
+            interactions = rng.integers(0, np.floor(r / inter_factor) + 1, (n, n, m))
 
         for i in range(n):
             interactions[i, i, :] = 0

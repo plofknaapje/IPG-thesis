@@ -1,5 +1,4 @@
 import numpy as np
-from numpy.random import Generator
 import gurobipy as gp
 from gurobipy import GRB
 
@@ -29,6 +28,7 @@ def local_inverse_weights(problem: KnapsackPackingGame) -> np.ndarray:
         for i in i_range
         for p in problem.players
     )
+
     model.addConstrs(
         delta[p, i] >= problem.weights[p, i] - w[p, i]
         for i in i_range

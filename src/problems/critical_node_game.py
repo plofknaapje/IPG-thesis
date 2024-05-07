@@ -10,7 +10,7 @@ from problems.base import IPGResult, early_stopping
 
 
 @dataclass
-class ADGParams:
+class CNGParams:
     success: float  # Delta
     mitigated: float  # Eta
     overcommit: float  # Epsilon
@@ -53,11 +53,11 @@ class ADGParams:
             self.capacity_perc = capacity_perc
 
         if self.success >= self.mitigated or self.mitigated >= self.overcommit:
-            raise ValueError("Invalid parameters for ADG")
+            raise ValueError("Invalid parameters for CNG")
 
 
 @dataclass
-class AttackerDefenderGame:
+class CriticalNodeGame:
     n: int  # number of targets
     weights: np.ndarray  # costs for defender and attacker (2, n)
     payoffs: np.ndarray  # rewards for defender and attacker (2, n)
@@ -73,16 +73,14 @@ class AttackerDefenderGame:
         self,
         weights: np.ndarray,
         payoffs: np.ndarray,
-        parameters: ADGParams,
+        parameters: CNGParams,
         rng: Generator | None = None,
     ):
         """
-        Create a new instance of the AttackerDefenderGame.
-
         Args:
             weights (np.ndarray): _description_
             payoffs (np.ndarray): _description_
-            parameters (ADGParams): Object for storing and generating AttackerDefenderGame parameters.
+            parameters (CNGParams): Object for storing and generating CriticalNodeGame parameters.
             cap_percentage (list[float, float] | None, optional): Capacity percentage per player. Defaults to None.
             rng (Generator | None, optional): Random number generator. Defaults to None.
         """
@@ -103,7 +101,7 @@ class AttackerDefenderGame:
 
     def solve(self, timelimit: int | None = None, verbose=False) -> IPGResult:
         """
-        Solve the KPG using zero_regrets(). Sets self.solution if this was None.
+        Solve the CNG using zero_regrets(). Sets self.solution if this was None.
         Sets self.result too, which records the information of the solution.
 
         Args:
@@ -117,7 +115,7 @@ class AttackerDefenderGame:
             print("Problem was already solved")
             return self.result
 
-        self.result = zero_regrets_adg(self, timelimit, verbose)
+        self.result = zero_regrets_cng(self, timelimit, verbose)
         self.solution = self.result.X
         return self.result
 
@@ -153,13 +151,13 @@ class AttackerDefenderGame:
             w = self.weights
         else:
             w = weights
-        
+
         if payoffs is None:
             p = self.payoffs
         else:
             p = payoffs
 
-        model = gp.Model("ADG player")
+        model = gp.Model("CNG player")
 
         x = model.addMVar((self.n), vtype=GRB.BINARY, name="x")
 
@@ -253,14 +251,14 @@ class AttackerDefenderGame:
             )
 
 
-def generate_random_ADG(
+def generate_random_CNG(
     n: int = 20,
     r: int = 50,
     capacity: list[float] | None = None,
     rng: Generator | None = None,
-) -> AttackerDefenderGame:
+) -> CriticalNodeGame:
     """
-    Generate a random instance of the AttackerDefenderGame.
+    Generate a random instance of the CriticalNodeGame.
 
     Args:
         n (int, optional): Number of nodes. Defaults to 20.
@@ -269,7 +267,7 @@ def generate_random_ADG(
         rng (Generator | None, optional): Random number generator. Defaults to None.
 
     Returns:
-        AttackerDefenderGame: ADG instance.
+        CriticalNodeGame: CNG instance.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -277,17 +275,17 @@ def generate_random_ADG(
     weights = rng.integers(1, r + 1, (2, n))
     payoffs = weights + rng.integers(1, r + 1, (2, n))
 
-    return AttackerDefenderGame(weights, payoffs, capacity, rng)
+    return CriticalNodeGame(weights, payoffs, capacity, rng)
 
 
-def zero_regrets_adg(
-    adg: AttackerDefenderGame, timelimit: int | None = None, verbose=False
+def zero_regrets_cng(
+    cng: CriticalNodeGame, timelimit: int | None = None, verbose=False
 ) -> IPGResult:
     """
-    Solves the AttackerDefenderGame instance to a PNE if possible and otherwise to a phi-NE.
+    Solves the CriticalNodeGame instance to a PNE if possible and otherwise to a phi-NE.
 
     Args:
-        adg (AttackerDefenderGame): Problem instance.
+        cng (CriticalNodeGame): Problem instance.
         timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
         verbose (bool, optional): Verbally report progress. Defaults to False.
 
@@ -298,40 +296,40 @@ def zero_regrets_adg(
         IPGResult: Object with all solving information.
     """
     start = time()
-    i_range = list(range(adg.n))
+    i_range = list(range(cng.n))
     phi_ub = 0
 
-    model = gp.Model("ZeroRegrets ADG")
+    model = gp.Model("ZeroRegrets CNG")
 
     phi = model.addVar(lb=0, ub=phi_ub)
-    x = model.addMVar((2, adg.n), vtype=GRB.BINARY, name="x")
+    x = model.addMVar((2, cng.n), vtype=GRB.BINARY, name="x")
     defender = x[0]
     attacker = x[1]
 
-    not_def = model.addMVar((adg.n), vtype=GRB.BINARY)
-    not_att = model.addMVar((adg.n), vtype=GRB.BINARY)
-    def_and_att = model.addMVar((adg.n), vtype=GRB.BINARY)
-    not_def_and_not_att = model.addMVar((adg.n), vtype=GRB.BINARY)
-    def_and_not_att = model.addMVar((adg.n), vtype=GRB.BINARY)
-    not_def_and_att = model.addMVar((adg.n), vtype=GRB.BINARY)
+    not_def = model.addMVar((cng.n), vtype=GRB.BINARY)
+    not_att = model.addMVar((cng.n), vtype=GRB.BINARY)
+    def_and_att = model.addMVar((cng.n), vtype=GRB.BINARY)
+    not_def_and_not_att = model.addMVar((cng.n), vtype=GRB.BINARY)
+    def_and_not_att = model.addMVar((cng.n), vtype=GRB.BINARY)
+    not_def_and_att = model.addMVar((cng.n), vtype=GRB.BINARY)
 
-    def_obj = adg.payoffs[0] @ (
+    def_obj = cng.payoffs[0] @ (
         not_def_and_not_att
-        + adg.mitigated * def_and_att
-        + adg.overcommit * def_and_not_att
-        + adg.success * not_def_and_att
+        + cng.mitigated * def_and_att
+        + cng.overcommit * def_and_not_att
+        + cng.success * not_def_and_att
     )
 
-    att_obj = adg.payoffs[1] @ (
-        -adg.normal * not_def_and_not_att
+    att_obj = cng.payoffs[1] @ (
+        -cng.normal * not_def_and_not_att
         + not_def_and_att
-        + (1 - adg.mitigated) * def_and_att
+        + (1 - cng.mitigated) * def_and_att
     )
 
     model.setObjective(def_obj + att_obj, GRB.MAXIMIZE)
 
-    model.addConstr(defender @ adg.weights[0] <= adg.capacity[0])
-    model.addConstr(attacker @ adg.weights[1] <= adg.capacity[1])
+    model.addConstr(defender @ cng.weights[0] <= cng.capacity[0])
+    model.addConstr(attacker @ cng.weights[1] <= cng.capacity[1])
 
     for i in i_range:
         # NOT Defender
@@ -366,24 +364,24 @@ def zero_regrets_adg(
         current_obj = model.ObjVal
 
         # Defender
-        new_def_x = adg.solve_player(True, x.X, timelimit=1)
-        new_def_obj = adg.obj_value(True, new_def_x, attacker.X)
+        new_def_x = cng.solve_player(True, x.X, timelimit=1)
+        new_def_obj = cng.obj_value(True, new_def_x, attacker.X)
 
         # Attacker
-        new_att_x = adg.solve_player(False, x.X, timelimit=1)
-        new_att_obj = adg.obj_value(False, defender.X, new_att_x)
+        new_att_x = cng.solve_player(False, x.X, timelimit=1)
+        new_att_obj = cng.obj_value(False, defender.X, new_att_x)
 
         if (
             def_obj.getValue() + phi_ub <= new_def_obj
             and tuple(new_def_x) not in defender_solutions
         ):
             model.addConstr(
-                adg.payoffs[0]
+                cng.payoffs[0]
                 @ (
                     (1 - new_def_x) * (1 - attacker)
-                    + adg.mitigated * new_def_x * attacker
-                    + adg.overcommit * new_def_x * (1 - attacker)
-                    + adg.success * (1 - new_def_x) * attacker
+                    + cng.mitigated * new_def_x * attacker
+                    + cng.overcommit * new_def_x * (1 - attacker)
+                    + cng.success * (1 - new_def_x) * attacker
                 )
                 <= def_obj + phi
             )
@@ -395,11 +393,11 @@ def zero_regrets_adg(
             and tuple(new_att_x) not in attacker_solutions
         ):
             model.addConstr(
-                adg.payoffs[1]
+                cng.payoffs[1]
                 @ (
-                    -adg.normal * (1 - defender) * (1 - new_att_x)
+                    -cng.normal * (1 - defender) * (1 - new_att_x)
                     + (1 - defender) * new_att_x
-                    + (1 - adg.mitigated) * defender * new_att_x
+                    + (1 - cng.mitigated) * defender * new_att_x
                 )
                 <= att_obj + phi
             )
@@ -450,5 +448,5 @@ def zero_regrets_adg(
 
 
 if __name__ == "__main__":
-    instance = generate_random_ADG(n=20, r=25)
-    print(zero_regrets_adg(instance, True))
+    instance = generate_random_CNG(n=20, r=25)
+    print(zero_regrets_cng(instance, True))

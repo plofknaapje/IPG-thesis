@@ -3,7 +3,7 @@ from numpy.random import Generator
 import gurobipy as gp
 from gurobipy import GRB
 
-from problems.attacker_defender_game import AttackerDefenderGame, ADGParams
+from problems.critical_node_game import CriticalNodeGame, CNGParams
 from problems.base import ApproxOptions
 
 
@@ -11,11 +11,11 @@ def generate_weight_problems(
     size: int,
     n: int,
     r=25,
-    parameters: ADGParams | list[ADGParams] | None = None,
+    parameters: CNGParams | list[CNGParams] | None = None,
     approx_options: ApproxOptions | None = None,
     rng: Generator | None = None,
     verbose=False,
-) -> list[AttackerDefenderGame]:
+) -> list[CriticalNodeGame]:
     if rng is None:
         rng = np.random.default_rng()
 
@@ -23,11 +23,11 @@ def generate_weight_problems(
         approx_options = ApproxOptions()
 
     if parameters is None:
-        parameters: list[ADGParams] = [
-            ADGParams(None, None, None, None, None, rng) for _ in range(size)
+        parameters: list[CNGParams] = [
+            CNGParams(None, None, None, None, None, rng) for _ in range(size)
         ]
-    elif isinstance(parameters, ADGParams):
-        parameters: list[ADGParams] = [parameters for _ in range(size)]
+    elif isinstance(parameters, CNGParams):
+        parameters: list[CNGParams] = [parameters for _ in range(size)]
 
     problems = []
 
@@ -36,7 +36,7 @@ def generate_weight_problems(
     while len(problems) < size:
         payoffs = weights + rng.integers(1, r + 1, (2, n))
 
-        problem = AttackerDefenderGame(weights, payoffs, parameters[len(problems)], rng)
+        problem = CriticalNodeGame(weights, payoffs, parameters[len(problems)], rng)
 
         result = problem.solve(approx_options.timelimit, verbose)
         if approx_options.valid_problem(result):
@@ -52,11 +52,11 @@ def generate_payoff_problems(
     size: int,
     n: int,
     r=25,
-    parameters: ADGParams | list[ADGParams] | None = None,
+    parameters: CNGParams | list[CNGParams] | None = None,
     approx_options: ApproxOptions | None = None,
     rng: Generator | None = None,
     verbose=False,
-) -> list[AttackerDefenderGame]:
+) -> list[CriticalNodeGame]:
     if rng is None:
         rng = np.random.default_rng()
 
@@ -64,11 +64,11 @@ def generate_payoff_problems(
         approx_options = ApproxOptions()
 
     if parameters is None:
-        parameters: list[ADGParams] = [
-            ADGParams(None, None, None, None, None, rng) for _ in range(size)
+        parameters: list[CNGParams] = [
+            CNGParams(None, None, None, None, None, rng) for _ in range(size)
         ]
-    elif isinstance(parameters, ADGParams):
-        parameters: list[ADGParams] = [parameters for _ in range(size)]
+    elif isinstance(parameters, CNGParams):
+        parameters: list[CNGParams] = [parameters for _ in range(size)]
 
     problems = []
 
@@ -77,7 +77,7 @@ def generate_payoff_problems(
     while len(problems) < size:
         weights = payoffs - rng.integers(1, r + 1, (2, n))
 
-        problem = AttackerDefenderGame(weights, payoffs, parameters[len(problems)], rng)
+        problem = CriticalNodeGame(weights, payoffs, parameters[len(problems)], rng)
 
         result = problem.solve(approx_options.timelimit, verbose)
         if approx_options.valid_problem(result):
@@ -90,7 +90,7 @@ def generate_payoff_problems(
 
 
 def inverse_payoffs(
-    problems: list[AttackerDefenderGame],
+    problems: list[CriticalNodeGame],
     learn_defence = True,
     learn_attack = True,
     sub_timelimit: int | None = None,
@@ -99,7 +99,7 @@ def inverse_payoffs(
     n_problems = len(problems)
     n_items = problems[0].n  # number of items
 
-    model = gp.Model("Inverse ADG (Payoffs)")
+    model = gp.Model("Inverse CNG (Payoffs)")
 
     delta = model.addMVar((n_problems, 2), name="delta")
     p = model.addMVar((2, n_items), vtype=GRB.INTEGER, lb=1, name="p")
@@ -113,7 +113,7 @@ def inverse_payoffs(
         for i in range(n_items):
             p[1, i].lb = problems[1].payoffs[1, i]
             p[1, i].ub = problems[1].payoffs[1, i]
-                    
+
 
     model.setObjective(delta.sum())
 
