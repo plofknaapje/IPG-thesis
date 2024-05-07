@@ -191,14 +191,13 @@ def local_inverse_payoffs_dynamic(problem: KnapsackProblem) -> np.ndarray:
 
     model.setObjective(delta.sum())
 
-    
     model.addConstrs(delta[i] >= p[i] - problem.payoffs[i] for i in i_range)
     model.addConstrs(delta[i] >= problem.payoffs[i] - p[i] for i in i_range)
     
     model.addConstr(p @ greedy_solution >= g[problem.n - 1, cap])
 
-    model.addConstrs(g[0, w] >= 0 for w in range(problem.weights[0]))
-    model.addConstrs(g[0, w] == p[0] for w in range(problem.weights[0], cap + 1))
+    model.addConstrs(g[0, q] >= 0 for q in range(problem.weights[0]))
+    model.addConstrs(g[0, q] == p[0] for q in range(problem.weights[0], cap + 1))
     for i in range(1, problem.n):
         model.addConstrs(g[i, w] == g[i-1, w] for w in range(problem.weights[i]))
         model.addConstrs(g[i, w] >= g[i-1, w] for w in range(problem.weights[i], cap + 1))

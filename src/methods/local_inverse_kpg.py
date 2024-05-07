@@ -101,7 +101,7 @@ def local_inverse_payoffs(problem: KnapsackPackingGame) -> np.ndarray:
     if model.Status == GRB.INFEASIBLE:
         raise ValueError("Problem is initially Infeasible")
 
-    # solutions = [set() for _ in problem.players]
+    solutions = [set() for _ in problem.players]
 
     while True:
         new_constraint = False
@@ -111,14 +111,18 @@ def local_inverse_payoffs(problem: KnapsackPackingGame) -> np.ndarray:
                 j, solution=greedy_solution, payoffs=p.X
             )
 
+            if tuple(new_player_x) in solutions[j]:
+                continue
+
             new_value = new_player_x @ p[j] + sum(
                 new_player_x * greedy_solution[o] @ problem.inter_coefs[j, o]
                 for o in problem.opps[j]
             )
 
-            if new_value.getValue() >= true_values[j].getValue() + eps:
+            if new_value.getValue() >= true_values[j].getValue():
                 model.addConstr(new_value <= true_values[j])
                 new_constraint = True
+                solutions[j].add(tuple(new_player_x))
 
         if not new_constraint:
             break

@@ -4,19 +4,21 @@ import os.path
 import numpy as np
 import pandas as pd
 
-from methods.local_inverse_kp import (
-    generate_problem,
+from methods.inverse_kpg import generate_weight_problems
+
+from methods.local_inverse_kpg import (
     local_inverse_payoffs,
     local_inverse_weights,
 )
 
 rng = np.random.default_rng(42)
-n_items = [100, 500, 1000, 5000, 10000]
+n_items = [100, 500, 1000, 5000]
+players = [2, 3, 4]
 ranges = [500, 1000, 5000]
-repeats = 30
+repeats = 2
 
-if os.path.isfile(f"./results/local_inverse_kp-payoffs-{repeats}.csv") and \
-    os.path.isfile(f"./results/local_inverse_kp-weights-{repeats}.csv"):
+if os.path.isfile(f"./results/local_inverse_kpg-payoffs-{repeats}.csv") and \
+    os.path.isfile(f"./results/local_inverse_kpg-weights-{repeats}.csv"):
     print("Already generated")
 
 else:
@@ -33,7 +35,7 @@ else:
             payoff_results = np.zeros((repeats))
             weight_results = np.zeros((repeats))
             for i in range(repeats):
-                problem = generate_problem(n, r=r, capacity=0.5, rng=rng)
+                problem = generate_weight_problems(n, r=r, capacity=0.5, rng=rng)
                 greedy_solution = problem.solve_greedy()
                 start = time()
                 local_inverse_payoffs(problem)
@@ -58,7 +60,7 @@ else:
         print(f"{n} items done")
 
     payoff_df = pd.DataFrame(payoff_data, columns=header)
-    payoff_df.to_csv(f"./results/local_inverse_kp-payoffs-{repeats}.csv", float_format="%10.3f")
+    payoff_df.to_csv(f"./results/local_inverse_kpg-payoffs-{repeats}.csv", float_format="%10.3f")
 
     weight_df = pd.DataFrame(weight_data, columns=header)
-    weight_df.to_csv(f"./results/local_inverse_kp-weights-{repeats}.csv", float_format="%10.3f")
+    weight_df.to_csv(f"./results/local_inverse_kpg-weights-{repeats}.csv", float_format="%10.3f")

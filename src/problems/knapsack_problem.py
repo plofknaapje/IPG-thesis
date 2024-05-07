@@ -90,6 +90,4 @@ class KnapsackProblem:
 
             p_w_ratio[highest] = 0
 
-        print(x @ self.weights, self.capacity)
-
         return x
