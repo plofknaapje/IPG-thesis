@@ -38,7 +38,7 @@ def generate_problem(
 
     if corr:
         weights = rng.integers(
-            np.maximum(payoffs - r / 5, 1), np.minimum(payoffs + r / 5, r + 1), n
+            np.maximum(payoffs - np.ceil(r / 5), 1), np.minimum(payoffs + np.floor(r / 5), r + 1), n
         )
     else:
         weights = rng.integers(1, r + 1, n)
@@ -74,6 +74,7 @@ def local_inverse_weights(problem: KnapsackProblem) -> np.ndarray:
 
     model.addConstrs(delta[i] >= w[i] - problem.weights[i] for i in i_range)
     model.addConstrs(delta[i] >= problem.weights[i] - w[i] for i in i_range)
+
 
     model.optimize()
     if model.Status == GRB.INFEASIBLE:
