@@ -78,7 +78,7 @@ if mode == "weights":
 
         weight_df = pd.DataFrame(weight_data, columns=header)
         weight_df.to_csv(
-            f"./results/local_inverse_kpg-weights-{repeats}-{max(players)}-{neg_inter}.csv", float_format="%3.3f")
+            f"./results/local_inverse_kpg-weights-{repeats}-{max(players)}-{neg_inter}.csv", float_format="%6.3f")
 
 elif mode == "payoffs":
     if os.path.isfile(f"./results/local_inverse_kpg-payoffs-{repeats}-{max(players)}-{neg_inter}.csv"):
@@ -126,4 +126,4 @@ elif mode == "payoffs":
 
         payoff_df = pd.DataFrame(payoff_data, columns=header)
         payoff_df.to_csv(
-            f"./results/local_inverse_kpg-payoffs-{repeats}-{max(players)}-{neg_inter}.csv", float_format="%3.3f")
+            f"./results/local_inverse_kpg-payoffs-{repeats}-{max(players)}-{neg_inter}.csv", float_format="%6.3f")
