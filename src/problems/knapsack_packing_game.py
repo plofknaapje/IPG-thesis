@@ -8,6 +8,7 @@ from gurobipy import GRB
 
 from problems.utils import powerset
 from problems.base import IPGResult, early_stopping
+from problems.knapsack_problem import KnapsackProblem
 
 eps = 0.001
 
@@ -150,33 +151,20 @@ class KnapsackPackingGame:
         return result
 
     def solve_greedy(self) -> np.ndarray:
-        p_w_ratio = self.payoffs / self.weights
-        initial_x = np.zeros_like(p_w_ratio)
-        total_weight = np.zeros(self.n)
+        # Solves KP without looking at interactions
 
-        # Initial selection without interaction
-        for p in self.players:
-            while p_w_ratio[p].sum() > 0:
-                highest = np.argmax(p_w_ratio[p])
-                if total_weight[p] + self.weights[p, highest] <= self.capacity[p]:
-                    initial_x[p, highest] = 1
-                    total_weight[p] += self.weights[p, highest]
-                p_w_ratio[p, highest] = 0
-
-        # Add interaction terms
-        p_w_ratio = (
-            self.payoffs + (self.inter_coefs * initial_x).sum(axis=0)
-        ) / self.weights
-        final_x = np.zeros_like(p_w_ratio)
-        total_weight = np.zeros(self.n)
+        initial_x = np.zeros_like(self.payoffs)
 
         for p in self.players:
-            while p_w_ratio[p].sum() > 0:
-                highest = np.argmax(p_w_ratio[p])
-                if total_weight[p] + self.weights[p, highest] <= self.capacity[p]:
-                    final_x[p, highest] = 1
-                    total_weight[p] += self.weights[p, highest]
-                p_w_ratio[p, highest] = 0
+            kp = KnapsackProblem(self.payoffs[p], self.weights[p], self.capacity[p])
+            initial_x[p] = kp.solve()
+
+        final_x = np.zeros_like(initial_x)
+        for p in self.players:
+            payoffs = self.payoffs[p] + (self.inter_coefs[p] * initial_x).sum(axis=0)
+
+            kp = KnapsackProblem(payoffs, self.weights[p], self.capacity[p])
+            final_x[p] = kp.solve()
 
         return final_x
 

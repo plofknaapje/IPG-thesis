@@ -85,14 +85,15 @@ def local_inverse_weights(problem: KnapsackProblem) -> np.ndarray:
 
         if new_solution @ problem.payoffs >= greedy_solution @ problem.payoffs + eps:
             model.addConstr(new_solution @ w >= problem.capacity + eps)
+
         elif new_solution @ problem.payoffs <= greedy_solution @ problem.payoffs:
-            print("Solution is now optimal")
             break
 
         model.optimize()
+
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
-        
+
     result = w.X.astype(int)
 
     model.close()
@@ -142,11 +143,6 @@ def local_inverse_payoffs(problem: KnapsackProblem) -> np.ndarray:
         new_solution = problem.solve(payoffs=new_payoffs)
 
         if new_payoffs @ new_solution <= new_payoffs @ greedy_solution:
-            print("Solution is now optimal")
-            break
-
-        elif tuple(new_solution) in solutions:
-            print("Duplicate solution")
             break
 
         solutions.add(tuple(new_solution))
@@ -157,11 +153,11 @@ def local_inverse_payoffs(problem: KnapsackProblem) -> np.ndarray:
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
-    
+
     result = p.X.astype(int)
-    
+
     model.close()
-    
+
     return result
 
 
@@ -193,7 +189,7 @@ def local_inverse_payoffs_dynamic(problem: KnapsackProblem) -> np.ndarray:
 
     model.addConstrs(delta[i] >= p[i] - problem.payoffs[i] for i in i_range)
     model.addConstrs(delta[i] >= problem.payoffs[i] - p[i] for i in i_range)
-    
+
     model.addConstr(p @ greedy_solution >= g[problem.n - 1, cap])
 
     model.addConstrs(g[0, q] >= 0 for q in range(problem.weights[0]))
@@ -201,14 +197,14 @@ def local_inverse_payoffs_dynamic(problem: KnapsackProblem) -> np.ndarray:
     for i in range(1, problem.n):
         model.addConstrs(g[i, w] == g[i-1, w] for w in range(problem.weights[i]))
         model.addConstrs(g[i, w] >= g[i-1, w] for w in range(problem.weights[i], cap + 1))
-        model.addConstrs(g[i, w] >= g[i-1, w - problem.weights[i]] + p[i] 
+        model.addConstrs(g[i, w] >= g[i-1, w - problem.weights[i]] + p[i]
                          for w in range(problem.weights[i], cap + 1))
-        
+
     model.optimize()
 
     if model.Status == GRB.INFEASIBLE:
         raise ValueError("Problem is Infeasible!")
-    
+
     result = p.X.astype(int)
 
     model.close()

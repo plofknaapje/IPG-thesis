@@ -40,7 +40,7 @@ def generate_weight_problems(
 
         result = problem.solve(approx_options.timelimit, verbose)
         if approx_options.valid_problem(result):
-            problem.append(problem)
+            problems.append(problem)
 
         if len(problems) != 0 and len(problems) % 10 == 0:
             print(f"{len(problems)} problems generated.")

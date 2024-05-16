@@ -23,7 +23,7 @@ else:
     payoff_data = []
     weight_data = []
 
-    header = ["n", "r", "avg", "sdev", "min", "max"]
+    header = ["items", "range", "avg", "sdev", "min", "max", "change"]
 
     total_runs = len(n_items) * len(ranges) * repeats
     runs = 0
@@ -31,7 +31,11 @@ else:
     for n in n_items:
         for r in ranges:
             payoff_results = np.zeros((repeats))
+            p_change = np.zeros((repeats))
+
             weight_results = np.zeros((repeats))
+            w_change = np.zeros((repeats))
+
             for i in range(repeats):
                 problem = generate_problem(n, r=r, capacity=0.5, rng=rng)
                 greedy_solution = problem.solve_greedy()
@@ -51,14 +55,14 @@ else:
                     print(f"{runs} out of {total_runs} done!")
 
             payoff_data.append([n, r, np.mean(payoff_results), np.std(payoff_results),
-                                np.min(payoff_results), np.max(payoff_results)])
+                                np.min(payoff_results), np.max(payoff_results), np.mean(p_change)])
             weight_data.append([n, r, np.mean(weight_results), np.std(weight_results),
-                                np.min(weight_results), np.max(weight_results)])
+                                np.min(weight_results), np.max(weight_results), np.mean(w_change)])
 
         print(f"{n} items done")
 
     payoff_df = pd.DataFrame(payoff_data, columns=header)
-    payoff_df.to_csv(f"./results/local_inverse_kp-payoffs-{repeats}.csv", float_format="%10.3f")
+    payoff_df.to_csv(f"./results/local_inverse_kp-payoffs-{repeats}.csv", float_format="%3.3f")
 
     weight_df = pd.DataFrame(weight_data, columns=header)
-    weight_df.to_csv(f"./results/local_inverse_kp-weights-{repeats}.csv", float_format="%10.3f")
+    weight_df.to_csv(f"./results/local_inverse_kp-weights-{repeats}.csv", float_format="%3.3f")
