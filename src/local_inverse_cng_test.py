@@ -7,11 +7,11 @@ from methods.local_inverse_cng import local_inverse_weights, local_inverse_payof
 
 
 mitigated = 0.6
-params = CNGParams(0.8*mitigated, mitigated, 1.25 * mitigated, 0.1, capacity_perc=[0.75, 0.1])
+params = CNGParams(0.8*mitigated, mitigated, 1.25 * mitigated, 0.1, capacity_perc=[0.3, 0.1])
 approx = ApproxOptions(True, 10, False)
 
 problem = generate_weight_problems(1, 25, 25, params, approx)[0]
-print(problem.result.PNE)
+print(problem.result)
 inverse_w = local_inverse_weights(problem)
 print(np.abs(inverse_w - problem.weights).sum() / problem.weights.sum())
 

@@ -18,3 +18,10 @@ def duplicate_array(arrays: list[np.ndarray], x: np.ndarray) -> bool:
         if np.array_equal(solution, x):
             return True
     return False
+
+
+def abs_error(arr1: np.ndarray, arr2: np.ndarray) -> float:
+    return np.abs(arr1 - arr2).sum()
+
+def rel_error(base_arr: np.ndarray, new_arr: np.ndarray) -> float:
+    return abs_error(base_arr, new_arr) / base_arr.sum()

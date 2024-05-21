@@ -38,9 +38,14 @@ def generate_weight_problems(
 
         problem = CriticalNodeGame(weights, payoffs, parameters[len(problems)], rng)
 
-        result = problem.solve(approx_options.timelimit, verbose)
-        if approx_options.valid_problem(result):
+        problem.solve(approx_options.timelimit, verbose)
+
+        if approx_options.valid_problem(problem.result[0]) and approx_options.valid_problem(problem.result[1]):
             problems.append(problem)
+        else:
+            print(f"Problem rejected, {approx_options.valid_problem(problem.result[0])}, {approx_options.valid_problem(problem.result[1])}")
+            print(problem.result[0])
+            print(problem.result[1])
 
         if len(problems) != 0 and len(problems) % 10 == 0:
             print(f"{len(problems)} problems generated.")
@@ -80,7 +85,7 @@ def generate_payoff_problems(
         problem = CriticalNodeGame(weights, payoffs, parameters[len(problems)], rng)
 
         result = problem.solve(approx_options.timelimit, verbose)
-        if approx_options.valid_problem(result):
+        if approx_options.valid_problem(result[0]) and approx_options.valid_problem(result[1]):
             problems.append(problem)
 
         if len(problems) != 0 and len(problems) % 10 == 0:

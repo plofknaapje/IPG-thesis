@@ -66,8 +66,9 @@ class CriticalNodeGame:
     mitigated: float  # mitigation costs / reward, eta < eps.
     success: float  # attack cost of defender. delta < eta.
     normal: float  # opportunit cost of defender.
-    solution: np.ndarray | None = None
-    result: IPGResult | None = None
+    solution: list[np.ndarray] | None = None
+    result: list[IPGResult] | None = None
+    PNE: bool | None = None
 
     def __init__(
         self,
@@ -92,14 +93,15 @@ class CriticalNodeGame:
         self.payoffs = payoffs
 
         self.capacity = list(
-            [int(parameters.capacity_perc[i] * weights[i].sum()) for i in [0, 1]]
+            [int(parameters.capacity_perc[i] * weights[i].sum())
+             for i in [0, 1]]
         )
         self.overcommit = parameters.overcommit
         self.mitigated = parameters.mitigated
         self.success = parameters.success
         self.normal = parameters.normal
 
-    def solve(self, timelimit: int | None = None, verbose=False) -> IPGResult:
+    def solve(self, timelimit: int | None = None, verbose=False) -> list[IPGResult]:
         """
         Solve the CNG using zero_regrets(). Sets self.solution if this was None.
         Sets self.result too, which records the information of the solution.
@@ -115,8 +117,11 @@ class CriticalNodeGame:
             print("Problem was already solved")
             return self.result
 
-        self.result = zero_regrets_cng(self, timelimit, verbose)
-        self.solution = self.result.X
+        self.result = [zero_regrets_cng(self, True, timelimit, verbose),
+                       zero_regrets_cng(self, False, timelimit, verbose)]
+        self.solution = [self.result[0].X, self.result[1].X]
+        self.PNE = self.result[0].PNE and self.result[1].PNE
+
         return self.result
 
     def solve_player(
@@ -279,7 +284,7 @@ def generate_random_CNG(
 
 
 def zero_regrets_cng(
-    cng: CriticalNodeGame, timelimit: int | None = None, verbose=False
+    cng: CriticalNodeGame, defender: bool | None = True, timelimit: int | None = None, verbose=False
 ) -> IPGResult:
     """
     Solves the CriticalNodeGame instance to a PNE if possible and otherwise to a phi-NE.
@@ -301,7 +306,7 @@ def zero_regrets_cng(
 
     model = gp.Model("ZeroRegrets CNG")
 
-    phi = model.addVar(lb=0, ub=phi_ub)
+    phi = model.addVar(lb=0, ub=0)
     x = model.addMVar((2, cng.n), vtype=GRB.BINARY, name="x")
     defender = x[0]
     attacker = x[1]
@@ -326,7 +331,12 @@ def zero_regrets_cng(
         + (1 - cng.mitigated) * def_and_att
     )
 
-    model.setObjective(def_obj + att_obj, GRB.MAXIMIZE)
+    if defender is None:
+        model.setObjective(def_obj + att_obj, GRB.MAXIMIZE)
+    elif defender:
+        model.setObjective(def_obj, GRB.MAXIMIZE)
+    else:
+        model.setObjective(att_obj, GRB.MAXIMIZE)
 
     model.addConstr(defender @ cng.weights[0] <= cng.capacity[0])
     model.addConstr(attacker @ cng.weights[1] <= cng.capacity[1])
@@ -342,7 +352,8 @@ def zero_regrets_cng(
         model.addConstr(def_and_att[i] == gp.and_(defender[i], attacker[i]))
 
         # NOT Defender AND NOT Attacker
-        model.addConstr(not_def_and_not_att[i] == gp.and_(not_def[i], not_att[i]))
+        model.addConstr(not_def_and_not_att[i] == gp.and_(
+            not_def[i], not_att[i]))
 
         # Defender AND NOT Attacker
         model.addConstr(def_and_not_att[i] == gp.and_(defender[i], not_att[i]))
@@ -355,8 +366,7 @@ def zero_regrets_cng(
     if model.Status == GRB.INFEASIBLE:
         raise ValueError("Problem is Infeasible!")
 
-    defender_solutions = set()
-    attacker_solutions = set()
+    solutions = [set(), set()]
 
     while True:
         new_constraint = False
@@ -364,17 +374,14 @@ def zero_regrets_cng(
         current_obj = model.ObjVal
 
         # Defender
-        new_def_x = cng.solve_player(True, x.X, timelimit=1)
+        new_def_x = cng.solve_player(True, x.X)
         new_def_obj = cng.obj_value(True, new_def_x, attacker.X)
 
         # Attacker
-        new_att_x = cng.solve_player(False, x.X, timelimit=1)
+        new_att_x = cng.solve_player(False, x.X)
         new_att_obj = cng.obj_value(False, defender.X, new_att_x)
 
-        if (
-            def_obj.getValue() + phi_ub <= new_def_obj
-            and tuple(new_def_x) not in defender_solutions
-        ):
+        if tuple(new_def_x) not in solutions[0] and def_obj.getValue() + phi_ub <= new_def_obj:
             model.addConstr(
                 cng.payoffs[0]
                 @ (
@@ -385,13 +392,10 @@ def zero_regrets_cng(
                 )
                 <= def_obj + phi
             )
-            defender_solutions.add(tuple(new_def_x))
+            solutions[0].add(tuple(new_def_x))
             new_constraint = True
 
-        if (
-            att_obj.getValue() + phi_ub <= new_att_obj
-            and tuple(new_att_x) not in attacker_solutions
-        ):
+        if tuple(new_att_x) not in solutions[1] and att_obj.getValue() + phi_ub <= new_att_obj:
             model.addConstr(
                 cng.payoffs[1]
                 @ (
@@ -401,7 +405,7 @@ def zero_regrets_cng(
                 )
                 <= att_obj + phi
             )
-            attacker_solutions.add(tuple(new_att_x))
+            solutions[1].add(tuple(new_att_x))
             new_constraint = True
 
         if not new_constraint:
@@ -410,7 +414,8 @@ def zero_regrets_cng(
         model.optimize()
 
         while model.Status == GRB.INFEASIBLE:
-            print("IPG is not feasible, increasing phi upper bound!")
+            if verbose:
+                print("IPG is not feasible, increasing phi upper bound!")
             phi_ub += 1
             phi.ub = phi_ub
             model.optimize()
@@ -418,10 +423,10 @@ def zero_regrets_cng(
         if verbose:
             print(model.ObjVal)
 
-        if timelimit is None:
-            continue
-        elif time() - start >= timelimit:
-            print("Timelimit reached!")
+        if timelimit is not None and time() - start >= timelimit:
+            if verbose:
+                print("Timelimit reached!")
+
             pne = False
             result = x.X
             objval = model.ObjVal
@@ -429,7 +434,7 @@ def zero_regrets_cng(
             model.close()
             return IPGResult(pne, result, objval, time() - start, phi, True)
 
-    if phi_ub >= 1:
+    if phi.X > 0:
         pne = False
         result = current_x
         objval = current_obj
@@ -445,8 +450,3 @@ def zero_regrets_cng(
     runtime = time() - start
 
     return IPGResult(pne, result, objval, runtime, phi)
-
-
-if __name__ == "__main__":
-    instance = generate_random_CNG(n=20, r=25)
-    print(zero_regrets_cng(instance, True))
