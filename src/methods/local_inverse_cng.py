@@ -11,6 +11,9 @@ eps = 0.00001
 
 def local_inverse_weights(problem: CriticalNodeGame, defender=True, phi=0, timelimit=None) -> np.ndarray:
     start = time()
+    if timelimit is not None:
+        local_timelimit = timelimit
+
     i_range = list(range(problem.n))
     if defender:
         solution = problem.solution[0]
@@ -21,6 +24,11 @@ def local_inverse_weights(problem: CriticalNodeGame, defender=True, phi=0, timel
                   problem.obj_value(False, solution[0], solution[1])]
 
     model = gp.Model("Local Inverse Weights")
+    if timelimit is not None and timelimit <= 0:
+        raise UserWarning("No time")
+    else:    
+        model.params.TimeLimit = max(1, timelimit)
+    
 
     w = model.addMVar((2, problem.n), vtype=GRB.INTEGER, lb=1)
 
@@ -45,6 +53,10 @@ def local_inverse_weights(problem: CriticalNodeGame, defender=True, phi=0, timel
     )
 
     model.optimize()
+    if timelimit is not None:
+        local_timelimit -= model.Runtime
+        model.params.TimeLimit = max(1, local_timelimit)
+
     if model.Status == GRB.INFEASIBLE:
         raise ValueError("Problem is initially infeasible")
 
@@ -55,14 +67,14 @@ def local_inverse_weights(problem: CriticalNodeGame, defender=True, phi=0, timel
         new_def_x = problem.solve_player(True, solution, current_w)
         new_def_obj = problem.obj_value(True, new_def_x, solution[1])
 
-        if new_def_obj >= obj_values[0] + phi + eps:
+        if new_def_obj >= obj_values[0] + phi:
             model.addConstr(new_def_x @ w[0] >= problem.capacity[0] + eps)
             new_constraint = True
 
         new_att_x = problem.solve_player(False, solution, current_w)
         new_att_obj = problem.obj_value(False, solution[0], new_att_x)
 
-        if new_att_obj >= obj_values[1] + phi + eps:
+        if new_att_obj >= obj_values[1] + phi:
             model.addConstr(new_att_x @ w[1] >= problem.capacity[1] + eps)
             new_constraint = True
 
@@ -70,15 +82,20 @@ def local_inverse_weights(problem: CriticalNodeGame, defender=True, phi=0, timel
             break
 
         model.optimize()
+        if timelimit is not None:
+            local_timelimit -= model.Runtime
+            model.params.TimeLimit = max(1, local_timelimit)
 
+        if model.Status == GRB.TIME_LIMIT or \
+            (timelimit is not None and time() - start >= timelimit):
+            print("Timelimit reached")
+            raise UserWarning("Timelimit reached")
+        
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible")
 
         if np.array_equal(current_w, w.X):
             break
-
-        if timelimit is not None and time() - start >= timelimit:
-            raise UserWarning("Out of time")
 
     inverse = w.X
 
@@ -89,6 +106,8 @@ def local_inverse_weights(problem: CriticalNodeGame, defender=True, phi=0, timel
 
 def local_inverse_payoffs(problem: CriticalNodeGame, defender=True, max_phi: int | None = None, timelimit=None) -> tuple[np.ndarray, int]:
     start = time()
+    if timelimit is not None:
+        local_timelimit = timelimit
 
     i_range = list(range(problem.n))
     if defender:
@@ -137,6 +156,10 @@ def local_inverse_payoffs(problem: CriticalNodeGame, defender=True, max_phi: int
     )
 
     model.optimize()
+    if timelimit is not None:
+        local_timelimit -= model.Runtime
+        model.params.TimeLimit = max(1, local_timelimit)
+
     if model.Status == GRB.INFEASIBLE:
         raise ValueError("Problem is initially Infeasible")
 
@@ -178,6 +201,9 @@ def local_inverse_payoffs(problem: CriticalNodeGame, defender=True, max_phi: int
             break
 
         model.optimize()
+        if timelimit is not None:
+            local_timelimit -= model.Runtime
+            model.params.TimeLimit = max(1, local_timelimit)
 
         while model.Status == GRB.INFEASIBLE:
             phi_ub += 1
@@ -187,8 +213,15 @@ def local_inverse_payoffs(problem: CriticalNodeGame, defender=True, max_phi: int
                 raise ValueError("Problem is Infeasible")
             model.optimize()
 
-        if timelimit is not None and time() - start >= timelimit:
-            raise UserWarning("Out of time")
+            if model.Status == GRB.TIME_LIMIT or \
+                (timelimit is not None and time() - start >= timelimit):
+                break
+            
+        if model.Status == GRB.TIME_LIMIT or \
+            (timelimit is not None and time() - start >= timelimit):
+            print("Timelimit reached")
+            raise UserWarning("Timelimit reached")
+
 
     inverse = p.X
 

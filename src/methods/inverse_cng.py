@@ -38,7 +38,11 @@ def generate_weight_problems(
 
         problem = CriticalNodeGame(weights, payoffs, parameters[len(problems)], rng)
 
-        problem.solve(approx_options.timelimit, verbose)
+        try: 
+            problem.solve(approx_options.timelimit, verbose)
+        except UserWarning:
+            print("Timelimit reached without useful solution")
+            continue
 
         if approx_options.valid_problem(problem.result[0]) and approx_options.valid_problem(problem.result[1]):
             problems.append(problem)

@@ -117,8 +117,12 @@ class CriticalNodeGame:
             print("Problem was already solved")
             return self.result
 
-        self.result = [zero_regrets_cng(self, True, timelimit, verbose),
-                       zero_regrets_cng(self, False, timelimit, verbose)]
+        try:
+            self.result = [zero_regrets_cng(self, defender=True, timelimit=timelimit, verbose=verbose)]
+            self.result.append(zero_regrets_cng(self, defender=False, timelimit=timelimit, hotstart=self.result[0].X, verbose=verbose))
+        except UserWarning:
+            raise UserWarning
+        
         self.solution = [self.result[0].X, self.result[1].X]
         self.PNE = self.result[0].PNE and self.result[1].PNE
 
@@ -211,6 +215,20 @@ class CriticalNodeGame:
         model.close()
 
         return result
+    
+    def solve_greedy(self, timelimit: int = 10) -> np.ndarray:
+        start = time()
+        solution = np.zeros((2, self.n))
+        sols = set()
+        while time() - start >= timelimit:
+            solution[0] = self.solve_player(True, solution)
+            solution[1] = self.solve_player(False, solution)
+            if tuple(solution) in sols:
+                break
+            else:
+                sols.add(tuple(solution))
+        
+        return solution
 
     def obj_value(
         self,
@@ -241,15 +259,20 @@ class CriticalNodeGame:
         else:
             attack = att_sol
 
+        if payoffs is None:
+            p = self.payoffs
+        else:
+            p = payoffs
+
         if defender:  # Defender
-            return self.payoffs[0] @ (
+            return p[0] @ (
                 (1 - defence) * (1 - attack)
                 + self.mitigated * defence * attack
                 + self.overcommit * defence * (1 - attack)
                 + self.success * (1 - defence) * attack
             )
         else:  # Attacker
-            return self.payoffs[1] @ (
+            return p[1] @ (
                 -self.normal * (1 - defence) * (1 - attack)
                 + (1 - defence) * attack
                 + (1 - self.mitigated) * defence * attack
@@ -258,8 +281,8 @@ class CriticalNodeGame:
 
 def generate_random_CNG(
     n: int = 20,
-    r: int = 50,
-    capacity: list[float] | None = None,
+    r: int = 25,
+    params: CNGParams | None = None,
     rng: Generator | None = None,
 ) -> CriticalNodeGame:
     """
@@ -268,7 +291,7 @@ def generate_random_CNG(
     Args:
         n (int, optional): Number of nodes. Defaults to 20.
         r (int, optional): Range of weight and payoff values. Defaults to 50.
-        capacity (list[float] | None, optional): Fractional capacity of players. Defaults to None.
+        params (CNGParams | None, optional): CNGParams settings. Defaults to None.
         rng (Generator | None, optional): Random number generator. Defaults to None.
 
     Returns:
@@ -280,11 +303,11 @@ def generate_random_CNG(
     weights = rng.integers(1, r + 1, (2, n))
     payoffs = weights + rng.integers(1, r + 1, (2, n))
 
-    return CriticalNodeGame(weights, payoffs, capacity, rng)
+    return CriticalNodeGame(weights, payoffs, params, rng)
 
 
 def zero_regrets_cng(
-    cng: CriticalNodeGame, defender: bool | None = True, timelimit: int | None = None, verbose=False
+    cng: CriticalNodeGame, defender: bool | None = True, timelimit: int | None = None, hotstart: np.ndarray | None = None, verbose=False
 ) -> IPGResult:
     """
     Solves the CriticalNodeGame instance to a PNE if possible and otherwise to a phi-NE.
@@ -301,15 +324,21 @@ def zero_regrets_cng(
         IPGResult: Object with all solving information.
     """
     start = time()
+    if timelimit is not None:
+        local_timelimit = timelimit
     i_range = list(range(cng.n))
     phi_ub = 0
 
     model = gp.Model("ZeroRegrets CNG")
 
+
     phi = model.addVar(lb=0, ub=0)
     x = model.addMVar((2, cng.n), vtype=GRB.BINARY, name="x")
-    defender = x[0]
-    attacker = x[1]
+    defence = x[0]
+    attack = x[1]
+
+    if hotstart is not None:
+        x.Start = hotstart
 
     not_def = model.addMVar((cng.n), vtype=GRB.BINARY)
     not_att = model.addMVar((cng.n), vtype=GRB.BINARY)
@@ -338,30 +367,34 @@ def zero_regrets_cng(
     else:
         model.setObjective(att_obj, GRB.MAXIMIZE)
 
-    model.addConstr(defender @ cng.weights[0] <= cng.capacity[0])
-    model.addConstr(attacker @ cng.weights[1] <= cng.capacity[1])
+    model.addConstr(defence @ cng.weights[0] <= cng.capacity[0])
+    model.addConstr(attack @ cng.weights[1] <= cng.capacity[1])
 
     for i in i_range:
         # NOT Defender
-        model.addConstr(not_def[i] == 1 - defender[i])
+        model.addConstr(not_def[i] == 1 - defence[i])
 
         # NOT Attacker
-        model.addConstr(not_att[i] == 1 - attacker[i])
+        model.addConstr(not_att[i] == 1 - attack[i])
 
         # Defender AND Attacker
-        model.addConstr(def_and_att[i] == gp.and_(defender[i], attacker[i]))
+        model.addConstr(def_and_att[i] == gp.and_(defence[i], attack[i]))
 
         # NOT Defender AND NOT Attacker
         model.addConstr(not_def_and_not_att[i] == gp.and_(
             not_def[i], not_att[i]))
 
         # Defender AND NOT Attacker
-        model.addConstr(def_and_not_att[i] == gp.and_(defender[i], not_att[i]))
+        model.addConstr(def_and_not_att[i] == gp.and_(defence[i], not_att[i]))
 
         # NOT Defender AND Attacker
-        model.addConstr(not_def_and_att[i] == gp.and_(not_def[i], attacker[i]))
+        model.addConstr(not_def_and_att[i] == gp.and_(not_def[i], attack[i]))
 
-    model.optimize()
+    if timelimit is not None:
+        model.params.TimeLimit = local_timelimit
+        model.optimize()
+    if timelimit is not None:
+        local_timelimit -= model.Runtime
 
     if model.Status == GRB.INFEASIBLE:
         raise ValueError("Problem is Infeasible!")
@@ -369,26 +402,29 @@ def zero_regrets_cng(
     solutions = [set(), set()]
 
     while True:
+        if verbose:
+            print(local_timelimit)
+
         new_constraint = False
         current_x = x.X
         current_obj = model.ObjVal
 
         # Defender
         new_def_x = cng.solve_player(True, x.X)
-        new_def_obj = cng.obj_value(True, new_def_x, attacker.X)
+        new_def_obj = cng.obj_value(True, new_def_x, attack.X)
 
         # Attacker
         new_att_x = cng.solve_player(False, x.X)
-        new_att_obj = cng.obj_value(False, defender.X, new_att_x)
+        new_att_obj = cng.obj_value(False, defence.X, new_att_x)
 
         if tuple(new_def_x) not in solutions[0] and def_obj.getValue() + phi_ub <= new_def_obj:
             model.addConstr(
                 cng.payoffs[0]
                 @ (
-                    (1 - new_def_x) * (1 - attacker)
-                    + cng.mitigated * new_def_x * attacker
-                    + cng.overcommit * new_def_x * (1 - attacker)
-                    + cng.success * (1 - new_def_x) * attacker
+                    (1 - new_def_x) * (1 - attack)
+                    + cng.mitigated * new_def_x * attack
+                    + cng.overcommit * new_def_x * (1 - attack)
+                    + cng.success * (1 - new_def_x) * attack
                 )
                 <= def_obj + phi
             )
@@ -399,9 +435,9 @@ def zero_regrets_cng(
             model.addConstr(
                 cng.payoffs[1]
                 @ (
-                    -cng.normal * (1 - defender) * (1 - new_att_x)
-                    + (1 - defender) * new_att_x
-                    + (1 - cng.mitigated) * defender * new_att_x
+                    -cng.normal * (1 - defence) * (1 - new_att_x)
+                    + (1 - defence) * new_att_x
+                    + (1 - cng.mitigated) * defence * new_att_x
                 )
                 <= att_obj + phi
             )
@@ -410,29 +446,42 @@ def zero_regrets_cng(
 
         if not new_constraint:
             break
-
+        
+        if timelimit is not None:
+            model.params.TimeLimit = max(1, local_timelimit)
         model.optimize()
-
-        while model.Status == GRB.INFEASIBLE:
+        if timelimit is not None:
+            local_timelimit -= model.Runtime
+            
+        while model.Status == GRB.INFEASIBLE and local_timelimit > 0:
             if verbose:
                 print("IPG is not feasible, increasing phi upper bound!")
             phi_ub += 1
             phi.ub = phi_ub
+            if timelimit is not None:
+                model.params.TimeLimit = max(1, local_timelimit)
             model.optimize()
-
-        if verbose:
-            print(model.ObjVal)
-
-        if timelimit is not None and time() - start >= timelimit:
+            if timelimit is not None:
+                local_timelimit -= model.Runtime
+        
+        if model.Status == GRB.TIME_LIMIT or local_timelimit <= 0:
             if verbose:
                 print("Timelimit reached!")
 
+            try:
+                result = x.X
+            except gp.GurobiError:
+                raise UserWarning("Timelimit without useful result")
+            
             pne = False
             result = x.X
             objval = model.ObjVal
             phi = phi.X
             model.close()
             return IPGResult(pne, result, objval, time() - start, phi, True)
+
+        if verbose:
+            print(model.ObjVal)
 
     if phi.X > 0:
         pne = False
