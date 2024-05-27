@@ -1,19 +1,24 @@
+from time import time
+
 import numpy as np
 
 from problems.base import ApproxOptions
-from problems.critical_node_game import CNGParams
-from methods.inverse_cng import generate_weight_problems, generate_payoff_problems
+from problems.critical_node_game import CNGParams, generate_random_CNG
+from methods.inverse_cng import generate_weight_problems
 from methods.local_inverse_cng import local_inverse_weights, local_inverse_payoffs
 
 
 mitigated = 0.6
-params = CNGParams(0.8*mitigated, mitigated, 1.25 * mitigated, 0.1, capacity_perc=[0.3, 0.1])
-approx = ApproxOptions(True, 10, False)
+params = CNGParams(0.8*mitigated, mitigated, 1.25 * mitigated, 0, capacity_perc=[0.3, 0.03])
+approx = ApproxOptions(allow_phi_ne=True, timelimit=None, allow_timelimit_reached=False)
 
-problem = generate_weight_problems(1, 25, 25, params, approx)[0]
-print(problem.result)
-inverse_w = local_inverse_weights(problem)
-print(np.abs(inverse_w - problem.weights).sum() / problem.weights.sum())
+problem = generate_random_CNG(300, params=params)
+sol = problem.solve_greedy()
+problem.solution = [sol, sol]
+
+print(sol[0])
+print(sol[1])
+print("Greedy solution done")
 
 inverse_p = local_inverse_payoffs(problem)
 print(np.abs(inverse_p - problem.payoffs).sum() / problem.payoffs.sum())

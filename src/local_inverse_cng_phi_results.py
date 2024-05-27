@@ -23,6 +23,8 @@ payoff_data = []
 
 header = ["nodes", "range", "norm", "mit", "runtime", "pne", "phi", "diff"]
 
+n_nodes = [50]
+
 for n in n_nodes:
     timelimit = n
     rng = np.random.default_rng(n)  # Allows for generating partial results
@@ -83,7 +85,8 @@ for n in n_nodes:
                             print("Timelimit reached")
                             if duplicate_solution:
                                 weight_times.append(timelimit)
-                                break
+                            break
+
                         try:
                             inverse_w = local_inverse_weights(problem, defender=defender, phi=phi, timelimit=weight_timelimit)
                         except ValueError:
@@ -93,7 +96,7 @@ for n in n_nodes:
                             print("Timelimit reached")
                             if duplicate_solution:
                                 weight_times.append(timelimit)
-                                break
+                            break
                         else:
                             weight_results.append(rel_error(weights, inverse_w))
                             weight_phi.append((problem_phi - phi)/problem_phi)
@@ -106,7 +109,9 @@ for n in n_nodes:
                                 weight_times.append(time() - start)
                                 if phi == 0:
                                     weight_pne += 1
-                                break
+                            break
+                    
+                    print(problem_phi, phi)
 
                     # Payoffs
                     print("Payoffs")
@@ -121,9 +126,7 @@ for n in n_nodes:
                         print("Timelimit reached")
                         if duplicate_solution:
                             payoff_times.append(timelimit)
-                            break
                     else:
-                        
                         payoff_results.append(rel_error(payoffs, inverse_p))
                         payoff_phi.append((problem_phi - phi)/problem_phi)
                         payoff_times.append(time() - start)
@@ -135,8 +138,10 @@ for n in n_nodes:
                             payoff_times.append(time() - start)
                             if phi == 0:
                                 payoff_pne += 1
-                            break
-
+                        
+                    
+                    if duplicate_solution:
+                        break
 
                 print(i)
 

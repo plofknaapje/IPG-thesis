@@ -191,7 +191,6 @@ def local_inverse_payoffs(problem: CriticalNodeGame, defender=True, max_phi: int
             + (1 - problem.mitigated) * defence * new_att_x
         )
 
-
         if tuple(new_att_x) not in solutions[1] and new_att_obj.getValue() >= true_objs[1].getValue() + phi_ub:
             model.addConstr(new_att_obj <= true_objs[1] + phi)
             solutions[1].add(tuple(new_att_x))

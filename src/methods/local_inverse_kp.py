@@ -138,7 +138,6 @@ def local_inverse_payoffs(problem: KnapsackProblem) -> np.ndarray:
     solutions = set()
 
     while True:
-        # new_payoffs = problem.payoffs - e.X + f.X
         new_payoffs = p.X
         new_solution = problem.solve(payoffs=new_payoffs)
 

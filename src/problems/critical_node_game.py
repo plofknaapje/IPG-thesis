@@ -214,19 +214,21 @@ class CriticalNodeGame:
 
         model.close()
 
-        return result
+        return result.astype(int)
     
     def solve_greedy(self, timelimit: int = 10) -> np.ndarray:
         start = time()
-        solution = np.zeros((2, self.n))
-        sols = set()
-        while time() - start >= timelimit:
-            solution[0] = self.solve_player(True, solution)
+        solution = np.zeros((2, self.n), dtype=int)
+        sols = [set(), set()]
+        while time() - start <= timelimit:
             solution[1] = self.solve_player(False, solution)
-            if tuple(solution) in sols:
+            solution[0] = self.solve_player(True, solution)
+
+            if tuple(solution[0]) in sols[0] and tuple(solution[1]) in sols[1]:
                 break
             else:
-                sols.add(tuple(solution))
+                sols[0].add(tuple(solution[0]))
+                sols[1].add(tuple(solution[1]))
         
         return solution
 
@@ -390,6 +392,8 @@ def zero_regrets_cng(
         # NOT Defender AND Attacker
         model.addConstr(not_def_and_att[i] == gp.and_(not_def[i], attack[i]))
 
+    model.optimize()
+
     if timelimit is not None:
         model.params.TimeLimit = local_timelimit
         model.optimize()
@@ -464,7 +468,7 @@ def zero_regrets_cng(
             if timelimit is not None:
                 local_timelimit -= model.Runtime
         
-        if model.Status == GRB.TIME_LIMIT or local_timelimit <= 0:
+        if timelimit is not None and (model.Status == GRB.TIME_LIMIT or local_timelimit <= 0):
             if verbose:
                 print("Timelimit reached!")
 
