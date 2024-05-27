@@ -67,8 +67,14 @@ class KnapsackProblem:
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
 
-        self.solution = x.X
-        return self.solution
+        solution = x.X
+
+        model.close()
+
+        if self.solution is None:
+            self.solution = solution
+
+        return solution
 
     def solve_greedy(self) -> np.ndarray:
         """

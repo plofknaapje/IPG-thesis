@@ -94,12 +94,12 @@ def generate_payoff_problems(
         capacity: list[float] = [capacity for _ in range(size)]
 
     if corr:
-        lower = np.maximum(payoffs - r / 10, 1)
-        upper = np.minimum(payoffs + r / 10, r + 1)
+        lower = np.maximum(payoffs - np.ceil(payoffs - r / 5), 1)
+        upper = np.minimum(payoffs + np.floor(payoffs + r / 5), r + 1)
 
     for i in range(size):
         if corr:
-            weights = rng.integers(lower, upper)
+            weights = rng.integers(lower, upper, n)
         else:
             weights = rng.integers(1, r + 1, n)
         problem = KnapsackProblem(payoffs, weights, capacity[i] * weights.sum())
@@ -132,7 +132,7 @@ def inverse_weights(problems: list[KnapsackProblem], verbose=False) -> np.ndarra
 
     model.setObjective(w.sum())
 
-    model.addConstr(w.sum() >= problems[0].weights.sum())
+    # model.addConstr(w.sum() >= problems[0].weights.sum())
 
     for problem in problems:
         model.addConstr(problem.solution @ w <= problem.capacity)
@@ -170,75 +170,6 @@ def inverse_weights(problems: list[KnapsackProblem], verbose=False) -> np.ndarra
             print(error, error / problems[0].weights.sum())
 
     inverse = w.X
-
-    model.close()
-
-    return inverse.astype(int)
-
-
-def inverse_payoffs_direct(
-    problems: list[KnapsackProblem], verbose=False
-) -> np.ndarray:
-    """
-    Determine the shared payoffs vector of the problems using inverse optimization.
-    This method optimises the payoff of the given solutions and adds constraints to the feasible set.
-
-    Args:
-        problems (list[KnapsackProblem]): KnapsackProblems with a shared payoffs vector.
-        verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
-
-    Raises:
-        ValueError: The problem is infeasible.
-
-    Returns:
-        np.ndarray: The inverse payoffs vector.
-    """
-    n = problems[0].n
-
-    model = gp.Model("Inverse Knapsack (Payoffs)")
-
-    p = model.addMVar((n), vtype=GRB.INTEGER, lb=1, name="p")
-
-    model.setObjective(
-        gp.quicksum(p @ problem.solution for problem in problems), GRB.MAXIMIZE
-    )
-
-    model.addConstr(p.sum() <= problems[0].payoffs.sum())
-
-    model.optimize()
-
-    if model.Status == GRB.INFEASIBLE:
-        raise ValueError("Problem is Infeasible!")
-
-    while True:
-        new_constraint = False
-        current_p = p.X
-
-        for _, problem in enumerate(problems):
-            new_x = problem.solve(payoffs=p.X)
-            new_obj = new_x @ p.X
-            true_obj = problem.solution @ p.X
-
-            if new_obj >= true_obj + eps:
-                model.addConstr(problem.solution @ p >= new_x @ p)
-                new_constraint = True
-
-        if not new_constraint:
-            break
-
-        model.optimize()
-
-        if np.array_equal(current_p, p.X):
-            break
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible!")
-
-        if verbose:
-            error = np.abs(problems[0].payoffs - p.X).sum()
-            print(error, error / problems[0].payoffs.sum())
-
-    inverse = p.X
 
     model.close()
 
@@ -288,84 +219,6 @@ def inverse_payoffs_delta(problems: list[KnapsackProblem], verbose=False) -> np.
             new_x = problem.solve(payoffs=p.X)
             if tuple(new_x) in solutions[i]:
                 continue
-            model.addConstr(delta[i] >= new_x @ p - problem.solution @ p)
-            new_constraint = True
-            solutions[i].add(tuple(new_x))
-
-        if not new_constraint:
-            break
-
-        model.optimize()
-
-        if np.array_equal(current_p, p.X):
-            break
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible!")
-
-        if verbose:
-            error = np.abs(problems[0].payoffs - p.X).sum()
-            print(error, error / problems[0].payoffs.sum())
-
-    inverse = p.X
-
-    model.close()
-
-    return inverse.astype(int)
-
-
-def inverse_payoffs_hybrid(
-    problems: list[KnapsackProblem], verbose=False
-) -> np.ndarray:
-    """
-    Determine the shared payoffs vector of the problems using inverse optimization.
-    Combines the approach of inverse_payoffs_direct() and inverse_payoffs_delta().
-
-    Args:
-        problems (list[KnapsackProblem]): KnapsackProblems with a shared payoffs vector.
-        verbose (bool, Optional): Report progress. Defaults to False.
-
-    Raises:
-        ValueError: The problem is infeasible.
-
-    Returns:
-        np.ndarray: The inverse payoffs vector.
-    """
-    n = problems[0].n
-    n_problems = len(problems)
-
-    model = gp.Model("Inverse Knapsack (Payoffs)")
-
-    delta = model.addMVar((n_problems), name="delta")
-    p = model.addMVar((n), vtype=GRB.INTEGER, lb=1, name="p")
-
-    model.setObjective(delta.sum())
-
-    model.addConstr(p.sum() == problems[0].payoffs.sum())
-
-    model.optimize()
-
-    if model.Status == GRB.INFEASIBLE:
-        raise ValueError("Problem is Infeasible!")
-
-    solutions = [set() for _ in problems]
-
-    while True:
-        new_constraint = False
-        current_p = p.X
-
-        for i, problem in enumerate(problems):
-            new_x = problem.solve(payoffs=p.X)
-
-            new_obj = new_x @ p.X
-            true_value = problem.solution @ p.X
-
-            if new_obj >= true_value + eps:
-                model.addConstr(problem.solution @ p >= new_x @ p)
-
-            if tuple(new_x) in solutions[i]:
-                continue
-
             model.addConstr(delta[i] >= new_x @ p - problem.solution @ p)
             new_constraint = True
             solutions[i].add(tuple(new_x))

@@ -76,7 +76,7 @@ for n in n_nodes:
                         if phi == 0:
                             weight_pne += 1
                         break
-                
+
                 if n <= payoff_cutoff:
                     # Payoffs
                     print("Payoffs")

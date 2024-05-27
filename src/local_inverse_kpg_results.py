@@ -12,22 +12,31 @@ from methods.local_inverse_kpg import (
 
 rng = np.random.default_rng(42)
 
-players = [2, 3]
+players = [2, 3, 4]
 
-repeats = 10
+repeats = 30
 neg_inter = True
 
-mode = "payoffs"
+mode = "weights"
 
 if mode == "weights":
-    ranges = [1000, 5000]
-    n_items = [100, 500, 1000, 5000]
+    ranges = [500, 1000]
+    if neg_inter:
+        n_items = [100, 500]
+    else:
+        n_items = [100, 500, 1000]
 elif mode == "payoffs":
-    ranges = [250, 500]
-    n_items = [50, 100, 250]
+    ranges = [500, 1000]
+    if neg_inter:
+        n_items = [100, 500]
+    else:
+        n_items = [100, 500, 1000]
 
 header = ["players", "items", "range", "avg", "sdev", "min", "max", "inf", "change"]
 total_runs = len(players) * len(n_items) * len(ranges) * repeats
+
+timelimit=60
+print(mode)
 
 if mode == "weights":
     weight_data = []
@@ -38,26 +47,25 @@ if mode == "weights":
             for r in ranges:
 
                 weight_results = np.zeros((repeats))
-                change = np.zeros((repeats))
+                change = []
                 w_inf = 0
 
                 for i in range(repeats):
-                    print(n, m, r)
                     problem = generate_weight_problems(
                         size=1, n=n, m=m, r=r, capacity=0.5, neg_inter=neg_inter, rng=rng, solve=False)[0]
                     greedy_solution = problem.solve_greedy()
 
                     start = time()
                     try:
-                        inverse_w = local_inverse_weights(problem)
+                        inverse_w = local_inverse_weights(problem, timelimit=timelimit)
                     except ValueError:
                         w_inf += 1
+                        weight_results[i] = timelimit
                     else:
-                        change[i] = rel_error(problem.weights, inverse_w)
+                        change.append(rel_error(problem.weights, inverse_w))
 
-                    runtime = time() - start
-                    print(runtime)
-                    weight_results[i] = runtime
+                        runtime = time() - start
+                        weight_results[i] = runtime
 
                     runs += 1
 
@@ -71,7 +79,7 @@ if mode == "weights":
 
     weight_df = pd.DataFrame(weight_data, columns=header)
     weight_df.to_csv(
-        f"./results/local_inverse_kpg-weights-{repeats}-{max(players)}-{neg_inter}.csv", float_format="%6.3f", index=False)
+        f"./results/kpg/local_inverse_kpg-weights-{repeats}-{max(players)}-{neg_inter}.csv", float_format="%6.3f", index=False)
 
 elif mode == "payoffs":
     payoff_data = []
@@ -82,37 +90,36 @@ elif mode == "payoffs":
         for m in n_items:
             for r in ranges:
 
-                payoff_results = np.zeros((repeats))
+                runtimes = np.zeros((repeats))
                 p_inf = 0
-                change = np.zeros((repeats))
+                change = []
 
                 for i in range(repeats):
-                    print(n, m, r)
                     problem = generate_weight_problems(
                         size=1, n=n, m=m, r=r, capacity=0.5, neg_inter=neg_inter, rng=rng, solve=False)[0]
                     greedy_solution = problem.solve_greedy()
                     start = time()
                     try:
-                        inverse_p, inverse_i = local_inverse_payoffs(problem, timelimit=60)
+                        inverse_p, inverse_i = local_inverse_payoffs(problem, timelimit=timelimit)
                     except ValueError:
                         p_inf += 1
-                        payoff_results[i] = 60
+                        runtimes[i] = timelimit
                     else:
-                        change[i] = (abs_error(problem.payoffs, inverse_i) + abs_error(problem.inter_coefs, inverse_i)) / \
-                                (problem.payoffs.sum() + problem.inter_coefs.sum())
+                        change.append((abs_error(problem.payoffs, inverse_p) + abs_error(problem.inter_coefs, inverse_i)) / \
+                                (problem.payoffs.sum() + problem.inter_coefs.sum()))
                         runtime = time() - start
-                        payoff_results[i] = runtime
+                        runtimes[i] = runtime
 
                     runs += 1
 
                     if runs % 10 == 0:
                         print(f"{runs} out of {total_runs} done!")
 
-                payoff_data.append([n, m, r, np.mean(payoff_results), np.std(payoff_results),
-                                    np.min(payoff_results), np.max(payoff_results), p_inf, np.mean(change)])
+                payoff_data.append([n, m, r, np.mean(runtimes), np.std(runtimes),
+                                    np.min(runtimes), np.max(runtimes), p_inf, np.mean(change)])
 
         print(f"{n} players done")
 
     payoff_df = pd.DataFrame(payoff_data, columns=header)
     payoff_df.to_csv(
-        f"./results/local_inverse_kpg-payoffs-{repeats}-{max(players)}-{neg_inter}.csv", float_format="%6.3f", index=False)
+        f"./results/kpg/local_inverse_kpg-payoffs-{repeats}-{max(players)}-{neg_inter}.csv", float_format="%6.3f", index=False)

@@ -151,22 +151,24 @@ class KnapsackPackingGame:
         return result
 
     def solve_greedy(self) -> np.ndarray:
-        # Solves KP without looking at interactions
+        change = True
 
-        initial_x = np.zeros_like(self.payoffs)
+        solution = np.zeros_like(self.payoffs)
+        sols = [set() for _ in self.players]
 
         for p in self.players:
-            kp = KnapsackProblem(self.payoffs[p], self.weights[p], self.capacity[p])
-            initial_x[p] = kp.solve()
+            solution[p] = self.solve_player(p, solution)
+            sols[p].add(tuple(solution[p]))
 
-        final_x = np.zeros_like(initial_x)
-        for p in self.players:
-            payoffs = self.payoffs[p] + (self.inter_coefs[p] * initial_x).sum(axis=0)
+        while change:
+            change = False
+            for p in self.players:
+                solution[p] = self.solve_player(p, solution)
+                if tuple(solution[p]) not in sols[p]:
+                    change = True
+                    sols[p].add(tuple(solution[p]))
 
-            kp = KnapsackProblem(payoffs, self.weights[p], self.capacity[p])
-            final_x[p] = kp.solve()
-
-        return final_x
+        return solution
 
     def obj_value(
         self,

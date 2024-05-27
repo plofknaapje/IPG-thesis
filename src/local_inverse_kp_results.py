@@ -59,7 +59,7 @@ for n in n_items:
     print(f"{n} items done")
 
 payoff_df = pd.DataFrame(payoff_data, columns=header)
-payoff_df.to_csv(f"./results/local_inverse_kp-payoffs-{repeats}.csv", float_format="%6.3f", index=False)
+payoff_df.to_csv(f"./results/kp/local_inverse_kp-payoffs-{repeats}.csv", float_format="%6.3f", index=False)
 
 weight_df = pd.DataFrame(weight_data, columns=header)
-weight_df.to_csv(f"./results/local_inverse_kp-weights-{repeats}.csv", float_format="%6.3f", index=False)
+weight_df.to_csv(f"./results/kp/local_inverse_kp-weights-{repeats}.csv", float_format="%6.3f", index=False)

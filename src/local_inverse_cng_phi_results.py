@@ -110,7 +110,7 @@ for n in n_nodes:
                                 if phi == 0:
                                     weight_pne += 1
                             break
-                    
+
                     print(problem_phi, phi)
 
                     # Payoffs
@@ -138,8 +138,8 @@ for n in n_nodes:
                             payoff_times.append(time() - start)
                             if phi == 0:
                                 payoff_pne += 1
-                        
-                    
+
+
                     if duplicate_solution:
                         break
 
@@ -153,10 +153,10 @@ for n in n_nodes:
     print(f"{n} nodes finished!")
 
     weight_df = pd.DataFrame(weight_data, columns=header)
-    weight_df.to_csv(f"results/local_inverse_cng-weights-{repeats}-{n}-nodes.csv", float_format="%6.3f", index=False)
+    weight_df.to_csv(f"results/cng/local_inverse_cng-weights-{repeats}-{n}-nodes.csv", float_format="%6.3f", index=False)
 
     payoff_df = pd.DataFrame(payoff_data, columns=header)
-    payoff_df.to_csv(f"results/local_inverse_cng-payoffs-{repeats}-{n}-nodes.csv", float_format="%6.3f", index=False)
+    payoff_df.to_csv(f"results/cng/local_inverse_cng-payoffs-{repeats}-{n}-nodes.csv", float_format="%6.3f", index=False)
 
     weight_data = []
     payoff_data = []
