@@ -12,23 +12,26 @@ from methods.local_inverse_kpg import (
 
 rng = np.random.default_rng(42)
 
-players = [2, 3, 4]
-
 repeats = 30
 neg_inter = True
 
-mode = "weights"
+if neg_inter:
+    players = [2]
+else:
+    players = [2, 3, 4]
+
+mode = "payoffs"
 
 if mode == "weights":
     ranges = [500, 1000]
     if neg_inter:
-        n_items = [100, 500]
+        n_items = [50, 100]
     else:
         n_items = [100, 500, 1000]
 elif mode == "payoffs":
     ranges = [500, 1000]
     if neg_inter:
-        n_items = [100, 500]
+        n_items = [50, 100]
     else:
         n_items = [100, 500, 1000]
 
@@ -79,7 +82,7 @@ if mode == "weights":
 
     weight_df = pd.DataFrame(weight_data, columns=header)
     weight_df.to_csv(
-        f"./results/kpg/local_inverse_kpg-weights-{repeats}-{max(players)}-{neg_inter}.csv", float_format="%6.3f", index=False)
+        f"./results/kpg/local/local_inverse_kpg-weights-{repeats}-{max(players)}-{neg_inter}.csv", float_format="%6.3f", index=False)
 
 elif mode == "payoffs":
     payoff_data = []
@@ -122,4 +125,4 @@ elif mode == "payoffs":
 
     payoff_df = pd.DataFrame(payoff_data, columns=header)
     payoff_df.to_csv(
-        f"./results/kpg/local_inverse_kpg-payoffs-{repeats}-{max(players)}-{neg_inter}.csv", float_format="%6.3f", index=False)
+        f"./results/kpg/local/local_inverse_kpg-payoffs-{repeats}-{max(players)}-{neg_inter}.csv", float_format="%6.3f", index=False)

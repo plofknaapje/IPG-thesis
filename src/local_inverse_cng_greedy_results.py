@@ -8,7 +8,7 @@ from problems.base import ApproxOptions
 from problems.critical_node_game import CNGParams, generate_random_CNG
 from methods.local_inverse_cng import local_inverse_weights, local_inverse_payoffs
 
-repeats = 15
+repeats = 20
 
 norms = [0, 0.1]
 r = 25
@@ -21,7 +21,9 @@ payoff_cutoff = 100
 weight_data = []
 payoff_data = []
 
-header = ["nodes", "range", "norm", "mit", "runtime", "pne", "phi", "diff"]
+header = ["nodes", "range", "norm", "mit", "runtime", "diff", "phi", "pne", "inf"]
+
+n_nodes = [200]
 
 for n in n_nodes:
     timelimit = n
@@ -34,19 +36,21 @@ for n in n_nodes:
             weight_phi = []
             weight_times = []
             weight_pne = 0
+            weight_inf = 0
 
             payoff_results = []
             payoff_phi = []
             payoff_times = []
             payoff_pne = 0
+            payoff_inf = 0
 
             print(n, norm, mit)
 
             for i in range(repeats):
-                problem = generate_random_CNG(n, 25, params)
+                problem = generate_random_CNG(n=n, r=25, params=params)
                 weights = problem.weights
                 payoffs = problem.payoffs
-                sol = problem.solve_greedy(5)
+                sol = problem.solve_greedy(timelimit=5)
                 problem.solution = [sol, sol]
 
                 # Weights
@@ -60,6 +64,7 @@ for n in n_nodes:
                     if weight_timelimit <= 0:
                         weight_times.append(timelimit)
                         print("Timelimit reached")
+                        weight_inf += 1
                         break
                     try:
                         inverse_w = local_inverse_weights(problem, defender=True, phi=phi, timelimit=weight_timelimit)
@@ -68,6 +73,7 @@ for n in n_nodes:
                     except UserWarning:
                         weight_times.append(timelimit)
                         print("Timelimit reached")
+                        weight_inf += 1
                         break
                     else:
                         weight_results.append(rel_error(weights, inverse_w))
@@ -85,8 +91,10 @@ for n in n_nodes:
                         inverse_p, phi = local_inverse_payoffs(problem, defender=True, max_phi=None, timelimit=timelimit)
                     except ValueError:
                         print("Strange problem!")
+                        payoff_inf += 1
                     except UserWarning:
                         payoff_times.append(timelimit)
+                        payoff_inf += 1
                         print("Timelimit reached")
                     else:
                         if phi == 0:
@@ -97,20 +105,20 @@ for n in n_nodes:
 
                 print(i)
 
-            weight_data.append([n, r, norm, mit, np.mean(weight_times), weight_pne, np.mean(weight_phi), np.mean(weight_results)])
+            weight_data.append([n, r, norm, mit, np.mean(weight_times), np.mean(weight_results), np.mean(weight_phi), weight_pne, weight_inf])
             print(weight_data[-1])
             if n <= payoff_cutoff:
-                payoff_data.append([n, r, norm, mit, np.mean(payoff_times), payoff_pne, np.mean(payoff_phi), np.mean(payoff_results)])
+                payoff_data.append([n, r, norm, mit, np.mean(payoff_times), np.mean(payoff_results), np.mean(payoff_phi), payoff_pne, payoff_inf])
                 print(payoff_data[-1])
 
     print(f"{n} nodes finished!")
 
     weight_df = pd.DataFrame(weight_data, columns=header)
-    weight_df.to_csv(f"results/local_inverse_cng-weights-{repeats}-{n}-nodes-greedy.csv", float_format="%6.3f", index=False)
+    weight_df.to_csv(f"results/cng/local/local_inverse_cng-weights-{repeats}-{n}-nodes-greedy.csv", float_format="%6.3f", index=False)
 
     if n <= payoff_cutoff:
         payoff_df = pd.DataFrame(payoff_data, columns=header)
-        payoff_df.to_csv(f"results/local_inverse_cng-payoffs-{repeats}-{n}-nodes-greedy.csv", float_format="%6.3f", index=False)
+        payoff_df.to_csv(f"results/cng/local/local_inverse_cng-payoffs-{repeats}-{n}-nodes-greedy.csv", float_format="%6.3f", index=False)
 
     weight_data = []
     payoff_data = []

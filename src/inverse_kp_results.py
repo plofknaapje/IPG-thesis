@@ -8,39 +8,70 @@ from methods.inverse_kp import (
 from problems.utils import rel_error
 
 
-rng = np.random.default_rng(0)
 repeats = 5
 
 columns = ["n", "r", "o", "runtime", "error"]
 
-ranges = [100, 500]
-n_items = [100, 500]
+approach = "weights"
+print(approach)
+
+if approach == "weights":
+    ranges = [100]
+    n_items = [20, 40, 60]
+elif approach == "payoffs":
+    ranges = [100]
+    n_items = [20, 40, 60]
 
 results = []
 
-approach = "payoffs"
-
 if approach == "weights":
-    weight_problems = generate_weight_problems(size=100, n=30, rng=rng, corr=True)
-    print("Finished generating problems")
-
-    values = weight_problems[0].weights
-    inverse = inverse_weights(weight_problems, verbose=True)
-
-elif approach == "payoffs":
+    mults = [1, 2, 3, 4]
     for n in n_items:
-        observations = [int(n), int(2*n), int(3*n)]
+        rng = np.random.default_rng(n)
+        observations = [int(n * mult) for mult in mults]
         for r in ranges:
             runtimes = [[] for _ in observations]
             error = [[] for _ in observations]
             for i in range(repeats):
-
-                payoff_problems = generate_payoff_problems(size=observations[-1], n=n, r=r, capacity=0.5, rng=rng)
-                payoffs = payoff_problems[0].payoffs
+                print(f"Problem {i}")
+                problems = generate_weight_problems(size=observations[-1], n=n, r=r, capacity=0.5, corr=True, rng=rng)
+                weights = problems[0].weights
 
                 for j, o in enumerate(observations):
                     start = time()
-                    inverse = inverse_payoffs_delta(payoff_problems[:o])
+                    inverse = inverse_weights(problems[:o], timelimit=o/2, verbose=True)
+                    end = time() - start
+                    runtimes[j].append(end)
+                    error[j].append(rel_error(weights, inverse))
+                    print(o, "done")
+
+            for j, o in enumerate(observations):
+                results.append([n, r, o, np.mean(runtimes[j]), np.mean(error[j])])
+                print(results[-1])
+
+        df = pd.DataFrame(results, columns=columns)
+        df.to_csv(f"./results/kp/inverse_kp-weights-{repeats}-{n}-items.csv", float_format="%6.3f", index=False)
+        results = []
+
+elif approach == "payoffs":
+    mults = [0.5, 1, 2, 4, 6, 8]
+
+    for n in n_items:
+        rng = np.random.default_rng(n)
+        observations = [int(n * mult) for mult in mults]
+        for r in ranges:
+            runtimes = [[] for _ in observations]
+            error = [[] for _ in observations]
+            for i in range(repeats):
+                print("Problem", i)
+                problems = generate_payoff_problems(size=observations[-1], n=n, r=r, capacity=0.5, corr=True, rng=rng)
+                payoffs = problems[0].payoffs
+
+                for j, o in enumerate(observations):
+                    if j != 0:
+                        continue
+                    start = time()
+                    inverse = inverse_payoffs_delta(problems[:o], timelimit=o/2, verbose=True)
                     end = time() - start
                     runtimes[j].append(end)
                     error[j].append(rel_error(payoffs, inverse))
@@ -49,5 +80,6 @@ elif approach == "payoffs":
                 results.append([n, r, o, np.mean(runtimes[j]), np.mean(error[j])])
                 print(results[-1])
 
-df = pd.DataFrame(results, columns=columns)
-df.to_csv(f"./results/kp/inverse_kp-{approach}-{repeats}.csv")
+        df = pd.DataFrame(results, columns=columns)
+        df.to_csv(f"./results/kp/inverse_kp-payoffs-{repeats}-{n}-nodes.csv", float_format="%6.3f", index=False)
+        results = []

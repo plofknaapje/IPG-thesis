@@ -9,7 +9,7 @@ from problems.critical_node_game import CNGParams
 from methods.inverse_cng import generate_weight_problems
 from methods.local_inverse_cng import local_inverse_weights, local_inverse_payoffs
 
-repeats = 5
+repeats = 10
 
 norms = [0, 0.1]
 r = 25
@@ -21,9 +21,7 @@ cap = [0.3, 0.03]
 weight_data = []
 payoff_data = []
 
-header = ["nodes", "range", "norm", "mit", "runtime", "pne", "phi", "diff"]
-
-n_nodes = [50]
+header = ["nodes", "range", "norm", "mit", "runtime", "diff", "phi", "pne", "inf"]
 
 for n in n_nodes:
     timelimit = n
@@ -36,11 +34,13 @@ for n in n_nodes:
             weight_phi = []
             weight_times = []
             weight_pne = 0
+            weight_inf = 0
 
             payoff_results = []
             payoff_phi = []
             payoff_times = []
             payoff_pne = 0
+            payoff_inf = 0
 
             print(n, norm, mit)
 
@@ -79,23 +79,34 @@ for n in n_nodes:
                     phi = 0
                     done = False
                     while True:
-                        weight_timelimit -= time() - start
+                        weight_timelimit = timelimit - (time() - start)
                         if weight_timelimit <= 0:
                             weight_times.append(timelimit)
+                            weight_inf += 1
                             print("Timelimit reached")
                             if duplicate_solution:
                                 weight_times.append(timelimit)
+                                weight_inf += 1
                             break
-
                         try:
                             inverse_w = local_inverse_weights(problem, defender=defender, phi=phi, timelimit=weight_timelimit)
                         except ValueError:
                             phi += 1
+                            if phi > problem_phi:
+                                print("Phi cant be improved!")
+                                weight_times.append(time() - start)
+                                weight_inf += 1
+                                if duplicate_solution:
+                                    weight_times.append(time() - start)
+                                    weight_inf += 1
+                                break
                         except UserWarning:
                             weight_times.append(timelimit)
+                            weight_inf += 1
                             print("Timelimit reached")
                             if duplicate_solution:
                                 weight_times.append(timelimit)
+                                weight_inf += 1
                             break
                         else:
                             weight_results.append(rel_error(weights, inverse_w))
@@ -120,12 +131,18 @@ for n in n_nodes:
                         inverse_p, phi = local_inverse_payoffs(problem, defender=defender, max_phi=problem_phi, timelimit=timelimit)
                     except ValueError:
                         print("Strange problem!")
-                        break
+                        payoff_times.append(timelimit)
+                        payoff_inf += 1
+                        if duplicate_solution:
+                            payoff_times.append(timelimit)
+                            payoff_inf += 1
                     except UserWarning:
                         payoff_times.append(timelimit)
+                        payoff_inf += 1
                         print("Timelimit reached")
                         if duplicate_solution:
                             payoff_times.append(timelimit)
+                            payoff_inf += 1
                     else:
                         payoff_results.append(rel_error(payoffs, inverse_p))
                         payoff_phi.append((problem_phi - phi)/problem_phi)
@@ -145,18 +162,18 @@ for n in n_nodes:
 
                 print(i)
 
-            weight_data.append([n, r, norm, mit, np.mean(weight_times), weight_pne, np.mean(weight_phi), np.mean(weight_results)])
+            weight_data.append([n, r, norm, mit, np.mean(weight_times), np.mean(weight_results), np.mean(weight_phi), weight_pne, weight_inf])
             print(weight_data[-1])
-            payoff_data.append([n, r, norm, mit, np.mean(payoff_times), payoff_pne, np.mean(payoff_phi), np.mean(payoff_results)])
+            payoff_data.append([n, r, norm, mit, np.mean(payoff_times), np.mean(payoff_results), np.mean(payoff_phi), payoff_pne, payoff_inf])
             print(payoff_data[-1])
 
     print(f"{n} nodes finished!")
 
     weight_df = pd.DataFrame(weight_data, columns=header)
-    weight_df.to_csv(f"results/cng/local_inverse_cng-weights-{repeats}-{n}-nodes.csv", float_format="%6.3f", index=False)
+    weight_df.to_csv(f"results/cng/local/local_inverse_cng-weights-{repeats}-{n}-nodes.csv", float_format="%6.3f", index=False)
 
     payoff_df = pd.DataFrame(payoff_data, columns=header)
-    payoff_df.to_csv(f"results/cng/local_inverse_cng-payoffs-{repeats}-{n}-nodes.csv", float_format="%6.3f", index=False)
+    payoff_df.to_csv(f"results/cng/local/local_inverse_cng-payoffs-{repeats}-{n}-nodes.csv", float_format="%6.3f", index=False)
 
     weight_data = []
     payoff_data = []

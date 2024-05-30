@@ -67,14 +67,14 @@ def local_inverse_weights(problem: CriticalNodeGame, defender=True, phi=0, timel
         new_def_x = problem.solve_player(True, solution, current_w)
         new_def_obj = problem.obj_value(True, new_def_x, solution[1])
 
-        if new_def_obj >= obj_values[0] + phi:
+        if new_def_obj > obj_values[0] + phi:
             model.addConstr(new_def_x @ w[0] >= problem.capacity[0] + eps)
             new_constraint = True
 
         new_att_x = problem.solve_player(False, solution, current_w)
         new_att_obj = problem.obj_value(False, solution[0], new_att_x)
 
-        if new_att_obj >= obj_values[1] + phi:
+        if new_att_obj > obj_values[1] + phi:
             model.addConstr(new_att_x @ w[1] >= problem.capacity[1] + eps)
             new_constraint = True
 
