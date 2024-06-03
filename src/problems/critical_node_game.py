@@ -122,7 +122,7 @@ class CriticalNodeGame:
             self.result.append(zero_regrets_cng(self, defender=False, timelimit=timelimit, hotstart=self.result[0].X, verbose=verbose))
         except UserWarning:
             raise UserWarning
-        
+
         self.solution = [self.result[0].X, self.result[1].X]
         self.PNE = self.result[0].PNE and self.result[1].PNE
 
@@ -215,7 +215,7 @@ class CriticalNodeGame:
         model.close()
 
         return result.astype(int)
-    
+
     def solve_greedy(self, timelimit: int = 10) -> np.ndarray:
         start = time()
         solution = np.zeros((2, self.n), dtype=int)
@@ -229,7 +229,7 @@ class CriticalNodeGame:
             else:
                 sols[0].add(tuple(solution[0]))
                 sols[1].add(tuple(solution[1]))
-        
+
         return solution
 
     def obj_value(
@@ -450,13 +450,13 @@ def zero_regrets_cng(
 
         if not new_constraint:
             break
-        
+
         if timelimit is not None:
             model.params.TimeLimit = max(1, local_timelimit)
         model.optimize()
         if timelimit is not None:
             local_timelimit -= model.Runtime
-            
+
         while model.Status == GRB.INFEASIBLE and local_timelimit > 0:
             if verbose:
                 print("IPG is not feasible, increasing phi upper bound!")
@@ -467,7 +467,7 @@ def zero_regrets_cng(
             model.optimize()
             if timelimit is not None:
                 local_timelimit -= model.Runtime
-        
+
         if timelimit is not None and (model.Status == GRB.TIME_LIMIT or local_timelimit <= 0):
             if verbose:
                 print("Timelimit reached!")
@@ -476,7 +476,7 @@ def zero_regrets_cng(
                 result = x.X
             except gp.GurobiError:
                 raise UserWarning("Timelimit without useful result")
-            
+
             pne = False
             result = x.X
             objval = model.ObjVal

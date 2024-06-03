@@ -5,7 +5,7 @@ from problems.base import ApproxOptions
 
 rng = np.random.default_rng(42)
 
-approx_options = ApproxOptions(allow_phi_ne=True, timelimit=10, allow_timelimit_reached=False)
+approx_options = ApproxOptions(allow_phi_ne=True, timelimit=25, allow_timelimit_reached=False)
 approach = "payoffs"
 
 # 10 seconds is too short for instances with 20 nodes.

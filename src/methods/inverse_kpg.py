@@ -1,3 +1,5 @@
+from time import time
+
 import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
@@ -192,7 +194,7 @@ def generate_payoff_problems(
 
 
 def inverse_weights(
-    problems: list[KnapsackPackingGame], sub_timelimit: int | None = None, verbose=False
+    problems: list[KnapsackPackingGame], timelimit: float | None = None, sub_timelimit: int | None = None, verbose=False
 ) -> np.ndarray:
     """
     Determine the shared weights matrix of the problems using inverse optimization.
@@ -208,6 +210,7 @@ def inverse_weights(
     Returns:
         np.ndarray: The inversed weights matrix.
     """
+    start = time()
     n = problems[0].n
     players = problems[0].players
     m = problems[0].m
@@ -257,6 +260,9 @@ def inverse_weights(
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
 
+        if timelimit is not None and time() - start >= timelimit:
+            break
+
         if np.array_equal(current_w, w.X):
             break
 
@@ -272,7 +278,7 @@ def inverse_weights(
 
 
 def inverse_payoffs(
-    problems: list[KnapsackPackingGame], sub_timelimit: int | None = None, verbose=False
+    problems: list[KnapsackPackingGame], timelimit: float | None = None, sub_timelimit: int | None = None, verbose=False
 ) -> np.ndarray:
     """
     Determine the shared payoffs matrix of the problems using inverse optimization.
@@ -289,6 +295,7 @@ def inverse_payoffs(
     Returns:
         np.ndarray: The inversed payoffs matrix.
     """
+    start = time()
     n_problems = len(problems)
     n_players = problems[0].n
     players = problems[0].players
@@ -347,6 +354,9 @@ def inverse_payoffs(
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
+
+        if timelimit is not None and time() - start >= timelimit:
+            break
 
         if np.array_equal(p.X, current_p):
             break
