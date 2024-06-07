@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import Enum
 
 import numpy as np
 import gurobipy as gp
@@ -29,6 +30,12 @@ class ApproxOptions:
             return False
         else:
             return True
+
+
+class Target(Enum):
+    PAYOFFS = 1
+    WEIGHTS = 2
+    PARAMS = 3
 
 
 def early_stopping(model: gp.Model, where: GRB.Callback):

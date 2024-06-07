@@ -8,15 +8,15 @@ from methods.inverse_kpg import (
     inverse_weights,
     inverse_payoffs,
 )
-from problems.base import ApproxOptions
+from problems.base import ApproxOptions, Target
 
 start = time()
 rng = np.random.default_rng(1)
 
-approach = "payoffs"
+approach = Target.PAYOFFS
 options = ApproxOptions(allow_phi_ne=True, timelimit=10, allow_timelimit_reached=False)
 
-if approach == "weights":
+if approach is Target.PAYOFFS:
     weight_problems = generate_weight_problems(
         50,
         2,
@@ -35,7 +35,7 @@ if approach == "weights":
 
     inverse = inverse_weights(weight_problems, verbose=False)
 
-elif approach == "payoffs":
+elif approach is Target.PAYOFFS:
     payoff_problems = generate_payoff_problems(
         100,
         2,
@@ -54,9 +54,6 @@ elif approach == "payoffs":
     values = payoff_problems[0].payoffs
 
     inverse = inverse_payoffs(payoff_problems, verbose=False)
-
-else:
-    raise ValueError("Unknown approach!")
 
 print(values)
 print(inverse)

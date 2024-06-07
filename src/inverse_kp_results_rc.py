@@ -13,16 +13,16 @@ repeats = 5
 
 columns = ["n", "r", "o", "runtime", "error"]
 
-approach = Target.WEIGHTS
+approach = Target.PAYOFFS
 print(approach)
 
 if approach is Target.WEIGHTS:
     ranges = [100]
-    n_items = [20, 40, 60]
+    n_items = [20, 40]
     mults = [1, 2, 3, 4]
 elif approach is Target.PAYOFFS:
     ranges = [100]
-    n_items = [20, 40, 60]
+    n_items = [20, 40]
     mults = [0.5, 1, 2, 4, 6, 8]
 
 results = []
@@ -37,12 +37,12 @@ if approach is Target.WEIGHTS:
             error = [[] for _ in observations]
             for i in range(repeats):
                 print(f"Problem {i}")
-                problems = generate_weight_problems(size=observations[-1], n=n, r=r, capacity=0.5, corr=True, rng=rng)
+                problems = generate_weight_problems(size=observations[-1], n=n, r=r, capacity=None, corr=True, rng=rng)
                 weights = problems[0].weights
 
                 for j, o in enumerate(observations):
                     start = time()
-                    inverse = inverse_weights(problems[:o], timelimit=o/2, verbose=True)
+                    inverse = inverse_weights(problems[:o], timelimit=o/2, verbose=False)
                     end = time() - start
                     runtimes[j].append(end)
                     error[j].append(rel_error(weights, inverse))
@@ -53,7 +53,7 @@ if approach is Target.WEIGHTS:
                 print(results[-1])
 
         df = pd.DataFrame(results, columns=columns)
-        df.to_csv(f"./results/kp/inverse_kp-weights-{repeats}-{n}-items.csv", float_format="%6.3f", index=False)
+        df.to_csv(f"./results/kp/inverse_kp-weights-{repeats}-{n}-items-rc.csv", float_format="%6.3f", index=False)
         results = []
 
 elif approach is Target.PAYOFFS:
@@ -66,14 +66,12 @@ elif approach is Target.PAYOFFS:
             error = [[] for _ in observations]
             for i in range(repeats):
                 print("Problem", i)
-                problems = generate_payoff_problems(size=observations[-1], n=n, r=r, capacity=0.5, corr=True, rng=rng)
+                problems = generate_payoff_problems(size=observations[-1], n=n, r=r, capacity=None, corr=True, rng=rng)
                 payoffs = problems[0].payoffs
 
                 for j, o in enumerate(observations):
-                    if j != 0:
-                        continue
                     start = time()
-                    inverse = inverse_payoffs_delta(problems[:o], timelimit=o/2, verbose=True)
+                    inverse = inverse_payoffs_delta(problems[:o], timelimit=o/2, verbose=False)
                     end = time() - start
                     runtimes[j].append(end)
                     error[j].append(rel_error(payoffs, inverse))
@@ -83,5 +81,5 @@ elif approach is Target.PAYOFFS:
                 print(results[-1])
 
         df = pd.DataFrame(results, columns=columns)
-        df.to_csv(f"./results/kp/inverse_kp-payoffs-{repeats}-{n}-nodes.csv", float_format="%6.3f", index=False)
+        df.to_csv(f"./results/kp/inverse_kp-payoffs-{repeats}-{n}-nodes-rc.csv", float_format="%6.3f", index=False)
         results = []

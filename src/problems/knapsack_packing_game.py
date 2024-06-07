@@ -54,7 +54,7 @@ class KnapsackPackingGame:
         self.players = list(range(self.n))
         self.pairs = list(itertools.permutations(self.players, 2))
         self.opps = [[o for p, o in self.pairs if p == j] for j in self.players]
-        self.capacity = capacity
+        self.capacity = [int(c) for c in capacity]
         self.solution = None
         self.result = None
 

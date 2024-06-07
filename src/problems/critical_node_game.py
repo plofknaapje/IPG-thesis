@@ -54,6 +54,15 @@ class CNGParams:
 
         if self.success >= self.mitigated or self.mitigated >= self.overcommit:
             raise ValueError("Invalid parameters for CNG")
+    
+    def to_array(self) -> np.ndarray:
+        arr = np.zeros(4)
+        arr[0] = self.success
+        arr[1] = self.mitigated
+        arr[2] = self.overcommit
+        arr[3] = self.normal
+
+        return arr
 
 
 @dataclass
@@ -134,6 +143,7 @@ class CriticalNodeGame:
         current_sol: np.ndarray | None = None,
         weights: np.ndarray | None = None,
         payoffs: np.ndarray | None = None,
+        params: np.ndarray | None = None,
         timelimit: int | None = None,
     ) -> np.ndarray:
         """
@@ -166,6 +176,18 @@ class CriticalNodeGame:
         else:
             p = payoffs
 
+        if params is None:
+            success = self.success
+            mitigated = self.mitigated
+            overcommit = self.overcommit
+            normal = self.normal
+        else:
+            success = params[0]
+            mitigated = params[1]
+            overcommit = params[2]
+            normal = params[3]
+            timelimit = None
+
         model = gp.Model("CNG player")
 
         x = model.addMVar((self.n), vtype=GRB.BINARY, name="x")
@@ -176,9 +198,9 @@ class CriticalNodeGame:
                 p[0]
                 @ (
                     (1 - x) * (1 - attack)
-                    + self.mitigated * x * attack
-                    + self.overcommit * x * (1 - attack)
-                    + self.success * (1 - x) * attack
+                    + mitigated * x * attack
+                    + overcommit * x * (1 - attack)
+                    + success * (1 - x) * attack
                 ),
                 GRB.MAXIMIZE,
             )
@@ -189,9 +211,9 @@ class CriticalNodeGame:
             model.setObjective(
                 p[1]
                 @ (
-                    -self.normal * (1 - defence) * (1 - x)
+                    -normal * (1 - defence) * (1 - x)
                     + (1 - defence) * x
-                    + (1 - self.mitigated) * defence * x
+                    + (1 - mitigated) * defence * x
                 ),
                 GRB.MAXIMIZE,
             )
@@ -279,6 +301,15 @@ class CriticalNodeGame:
                 + (1 - defence) * attack
                 + (1 - self.mitigated) * defence * attack
             )
+        
+    def params(self) -> np.ndarray:
+        arr = np.zeros(4)
+        arr[0] = self.success
+        arr[1] = self.mitigated
+        arr[2] = self.overcommit
+        arr[3] = self.normal
+
+        return arr
 
 
 def generate_random_CNG(

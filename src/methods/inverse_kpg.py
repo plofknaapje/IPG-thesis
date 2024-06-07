@@ -83,7 +83,7 @@ def generate_weight_problems(
             interactions[i, i, :] = 0
 
         problem = KnapsackPackingGame(
-            weights, payoffs, interactions, list(capacity[len(problems)] * weight_sum)
+            weights, payoffs, interactions, np.floor(list(capacity[len(problems)] * weight_sum)).astype(int)
         )
 
         if solve:
@@ -162,12 +162,10 @@ def generate_payoff_problems(
         else:
             weights = rng.integers(1, r + 1, (n, m))
 
-        interactions = rng.integers(0, int(r / inter_factor) + 1, (n, n, m))
         if neg_inter:
-            mask = rng.integers(-1, 2, (n, n, m))
+            interactions = rng.integers(- np.floor(r / inter_factor), np.floor(r / inter_factor) + 1, (n, n, m))
         else:
-            mask = rng.integers(0, 2, (n, n, m))
-        interactions = interactions * mask
+            interactions = rng.integers(0, np.floor(r / inter_factor) + 1, (n, n, m))
 
         for i in range(n):
             interactions[i, i, :] = 0
@@ -176,7 +174,7 @@ def generate_payoff_problems(
             weights,
             payoffs,
             interactions,
-            list(capacity[len(problems)] * weights.sum(axis=1)),
+            np.floor(list(capacity[len(problems)] * weights.sum(axis=1))).astype(int),
         )
 
         if solve:
@@ -226,7 +224,7 @@ def inverse_weights(
 
     model.setObjective(w.sum())
 
-    # model.addConstrs(w[j].sum() >= problems[0].weights[j].sum() for j in players)
+    model.addConstrs(w[j].sum() >= problems[0].weights[j].sum() for j in players)
 
     for problem in problems:
         for j in players:
@@ -307,8 +305,6 @@ def inverse_payoffs(
     p = model.addMVar((n_players, n_items), vtype=GRB.INTEGER, lb=1, name="p")
 
     model.setObjective(delta.sum())
-
-    # model.addConstrs(p[j].sum() <= problems[0].payoffs[j].sum() for j in players)
 
     true_objs = {
         (i, j): problem.solution[j] @ p[j]
