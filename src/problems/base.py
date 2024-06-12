@@ -1,11 +1,13 @@
-from dataclasses import dataclass
 from enum import Enum
 
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass
 import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
 
-@dataclass
+
+@dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class IPGResult:
     PNE: bool
     X: np.ndarray
@@ -18,7 +20,7 @@ class IPGResult:
 @dataclass
 class ApproxOptions:
     allow_phi_ne: bool = False
-    timelimit: int | None = None
+    timelimit: int = None
     allow_timelimit_reached: bool = False
 
     def valid_problem(self, result: IPGResult) -> bool:

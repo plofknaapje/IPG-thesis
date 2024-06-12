@@ -11,9 +11,9 @@ eps = 0.001
 def generate_problem(
     n: int,
     r: int = 100,
-    capacity: float | None = None,
+    capacity: float = None,
     corr: bool = True,
-    rng: Generator | None = None,
+    rng: Generator = None,
 ) -> KnapsackProblem:
     """
     Generates a single KnapsackProblem.
@@ -21,7 +21,7 @@ def generate_problem(
     Args:
         n (int): Number of items
         r (int, optional): Range of payoff and weight values. Defaults to 100.
-        capacity (float | None, optional): Fractional capacity of instances. Defaults to None.
+        capacity (float, optional): Fractional capacity of instances. Defaults to None.
         corr (bool, optional): Should weights and payoffs be correlated?. Defaults to True.
         rng (Generator, optional): Random number generator. Defaults to None.
 
@@ -38,12 +38,14 @@ def generate_problem(
 
     if corr:
         weights = rng.integers(
-            np.maximum(payoffs - np.ceil(r / 5), 1), np.minimum(payoffs + np.floor(r / 5), r + 1), n
+            np.maximum(payoffs - np.ceil(r / 5), 1),
+            np.minimum(payoffs + np.floor(r / 5), r + 1),
+            n,
         )
     else:
         weights = rng.integers(1, r + 1, n)
 
-    return KnapsackProblem(payoffs, weights, capacity * weights.sum())
+    return KnapsackProblem(payoffs, weights, capacity)
 
 
 def local_inverse_weights(problem: KnapsackProblem) -> np.ndarray:
@@ -74,7 +76,6 @@ def local_inverse_weights(problem: KnapsackProblem) -> np.ndarray:
 
     model.addConstrs(delta[i] >= w[i] - problem.weights[i] for i in i_range)
     model.addConstrs(delta[i] >= problem.weights[i] - w[i] for i in i_range)
-
 
     model.optimize()
     if model.Status == GRB.INFEASIBLE:
@@ -194,10 +195,14 @@ def local_inverse_payoffs_dynamic(problem: KnapsackProblem) -> np.ndarray:
     model.addConstrs(g[0, q] >= 0 for q in range(problem.weights[0]))
     model.addConstrs(g[0, q] == p[0] for q in range(problem.weights[0], cap + 1))
     for i in range(1, problem.n):
-        model.addConstrs(g[i, w] == g[i-1, w] for w in range(problem.weights[i]))
-        model.addConstrs(g[i, w] >= g[i-1, w] for w in range(problem.weights[i], cap + 1))
-        model.addConstrs(g[i, w] >= g[i-1, w - problem.weights[i]] + p[i]
-                         for w in range(problem.weights[i], cap + 1))
+        model.addConstrs(g[i, w] == g[i - 1, w] for w in range(problem.weights[i]))
+        model.addConstrs(
+            g[i, w] >= g[i - 1, w] for w in range(problem.weights[i], cap + 1)
+        )
+        model.addConstrs(
+            g[i, w] >= g[i - 1, w - problem.weights[i]] + p[i]
+            for w in range(problem.weights[i], cap + 1)
+        )
 
     model.optimize()
 

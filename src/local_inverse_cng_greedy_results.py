@@ -28,7 +28,9 @@ n_nodes = [200]
 for n in n_nodes:
     timelimit = n
     rng = np.random.default_rng(n)  # Allows for generating partial results
-    approx = ApproxOptions(allow_phi_ne=True, timelimit=200, allow_timelimit_reached=True)
+    approx = ApproxOptions(
+        allow_phi_ne=True, timelimit=200, allow_timelimit_reached=True
+    )
     for norm in norms:
         for mit in mitigated:
             params = CNGParams(0.8 * mit, mit, 1.25 * mit, norm, capacity_perc=cap)
@@ -67,7 +69,9 @@ for n in n_nodes:
                         weight_inf += 1
                         break
                     try:
-                        inverse_w = local_inverse_weights(problem, defender=True, phi=phi, timelimit=weight_timelimit)
+                        inverse_w = local_inverse_weights(
+                            problem, defender=True, phi=phi, timelimit=weight_timelimit
+                        )
                     except ValueError:
                         phi += 1
                     except UserWarning:
@@ -88,7 +92,9 @@ for n in n_nodes:
                     print("Payoffs")
                     start = time()
                     try:
-                        inverse_p, phi = local_inverse_payoffs(problem, defender=True, max_phi=None, timelimit=timelimit)
+                        inverse_p, phi = local_inverse_payoffs(
+                            problem, defender=True, max_phi=None, timelimit=timelimit
+                        )
                     except ValueError:
                         print("Strange problem!")
                         payoff_inf += 1
@@ -105,20 +111,52 @@ for n in n_nodes:
 
                 print(i)
 
-            weight_data.append([n, r, norm, mit, np.mean(weight_times), np.mean(weight_results), np.mean(weight_phi), weight_pne, weight_inf])
+            weight_data.append(
+                [
+                    n,
+                    r,
+                    norm,
+                    mit,
+                    np.mean(weight_times),
+                    np.mean(weight_results),
+                    np.mean(weight_phi),
+                    weight_pne,
+                    weight_inf,
+                ]
+            )
             print(weight_data[-1])
             if n <= payoff_cutoff:
-                payoff_data.append([n, r, norm, mit, np.mean(payoff_times), np.mean(payoff_results), np.mean(payoff_phi), payoff_pne, payoff_inf])
+                payoff_data.append(
+                    [
+                        n,
+                        r,
+                        norm,
+                        mit,
+                        np.mean(payoff_times),
+                        np.mean(payoff_results),
+                        np.mean(payoff_phi),
+                        payoff_pne,
+                        payoff_inf,
+                    ]
+                )
                 print(payoff_data[-1])
 
     print(f"{n} nodes finished!")
 
     weight_df = pd.DataFrame(weight_data, columns=header)
-    weight_df.to_csv(f"results/cng/local/local_inverse_cng-weights-{repeats}-{n}-nodes-greedy.csv", float_format="%6.3f", index=False)
+    weight_df.to_csv(
+        f"results/cng/local/local_inverse_cng-weights-{repeats}-{n}-nodes-greedy.csv",
+        float_format="%6.3f",
+        index=False,
+    )
 
     if n <= payoff_cutoff:
         payoff_df = pd.DataFrame(payoff_data, columns=header)
-        payoff_df.to_csv(f"results/cng/local/local_inverse_cng-payoffs-{repeats}-{n}-nodes-greedy.csv", float_format="%6.3f", index=False)
+        payoff_df.to_csv(
+            f"results/cng/local/local_inverse_cng-payoffs-{repeats}-{n}-nodes-greedy.csv",
+            float_format="%6.3f",
+            index=False,
+        )
 
     weight_data = []
     payoff_data = []

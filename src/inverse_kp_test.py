@@ -2,7 +2,12 @@ from time import time
 
 import numpy as np
 
-from methods.inverse_kp import generate_payoff_problems, generate_weight_problems, inverse_payoffs_delta, inverse_weights
+from methods.inverse_kp import (
+    generate_payoff_problems,
+    generate_weight_problems,
+    inverse_payoffs_delta,
+    inverse_weights,
+)
 from problems.base import Target
 
 start = time()
@@ -17,7 +22,7 @@ if approach is Target.WEIGHTS:
     values = weight_problems[0].weights
     inverse = inverse_weights(weight_problems, verbose=True)
 
-elif approach is Target.WEIGHTS:
+elif approach is Target.PAYOFFS:
     payoff_problems = generate_payoff_problems(size=200, n=25, rng=rng, corr=False)
     print("Finished generating problems")
 

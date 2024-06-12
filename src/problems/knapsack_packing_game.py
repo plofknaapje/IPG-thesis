@@ -1,42 +1,39 @@
-from dataclasses import dataclass
 from time import time
 import itertools
+from typing import List
 
+from pydantic import ConfigDict, BaseModel
 import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
 
 from problems.utils import powerset
 from problems.base import IPGResult, early_stopping
-from problems.knapsack_problem import KnapsackProblem
 
 eps = 0.001
 
 
-@dataclass
-class KnapsackPackingGame:
+class KnapsackPackingGame(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     # Class for storing binary Knapsack Packing Games.
-
     n: int  # number of players
     m: int  # number of items
-    players: list[int]  # list of player indices, length n
-    pairs: list[list[int]]  # list of all possible pairs of players
-    opps: list[list[int]]  # opponents of each player
-    capacity: list[int]  # capacity of each player, length n
+    players: List[int]  # list of player indices, length n
+    pairs: List[List[int]]  # list of all possible pairs of players
+    opps: List[List[int]]  # opponents of each player
+    capacity: List[int]  # capacity of each player, length n
     weights: np.ndarray  # weights of the items, (n, m)
     payoffs: np.ndarray  # payoffs of the items, (n, m)
-    inter_coefs: (
-        np.ndarray
-    )  # interaction payoff of the items (n, n, m) with 0 on diagonals
-    solution: np.ndarray | None
-    result: IPGResult | None
+    inter_coefs: np.ndarray  # interaction payoff of the items (n, n, m)
+    solution: np.ndarray = None
+    result: IPGResult = None
 
     def __init__(
         self,
         weights: np.ndarray,
         payoffs: np.ndarray,
         inter_coefs: np.ndarray,
-        capacity: list[int],
+        capacity: List[float],
     ):
         """
         Create a new instance of the KnapsackPackingGame
@@ -45,18 +42,25 @@ class KnapsackPackingGame:
             weights (np.ndarray): Weights matrix.
             payoffs (np.ndarray): Payoffs matrix.
             inter_coefs (np.ndarray): Interaction matrix.
-            capacity (list[float]): Fractional capacity per player.
+            capacity (List[float]): Fractional capacity per player.
         """
-        self.n, self.m = weights.shape
-        self.weights = weights
-        self.payoffs = payoffs
-        self.inter_coefs = inter_coefs
-        self.players = list(range(self.n))
-        self.pairs = list(itertools.permutations(self.players, 2))
-        self.opps = [[o for p, o in self.pairs if p == j] for j in self.players]
-        self.capacity = [int(c) for c in capacity]
-        self.solution = None
-        self.result = None
+        n, m = weights.shape
+        players = list(range(n))
+        pairs = list(itertools.permutations(players, 2))
+        opps = [[o for p, o in pairs if p == j] for j in players]
+        capacity = [int(capacity[j] * weights[j].sum()) for j in players]
+
+        super().__init__(
+            n=n,
+            m=m,
+            players=players,
+            pairs=pairs,
+            opps=opps,
+            capacity=capacity,
+            weights=weights,
+            payoffs=payoffs,
+            inter_coefs=inter_coefs,
+        )
 
     def print_data(self):
         # Prints the payoffs, weights and interaction coefficients of the KPG.
@@ -67,14 +71,14 @@ class KnapsackPackingGame:
         print("Interaction coefficients")
         print(self.inter_coefs)
 
-    def solve(self, verbose=False, timelimit: int | None = None) -> IPGResult:
+    def solve(self, verbose=False, timelimit: int = None) -> IPGResult:
         """
         Solve the KPG using zero_regrets(). Sets self.solution if this was None.
         Sets self.result too, which records the information of the solution.
 
         Args:
             verbose (bool, optional): Transfered to zero_regrets(verbose). Defaults to False.
-            timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
+            timelimit (int, optional): Runtime limit in seconds. Defaults to None.
 
         Returns:
             IPGResult: Object with all solving information.
@@ -90,11 +94,11 @@ class KnapsackPackingGame:
     def solve_player(
         self,
         player: int,
-        current_sol: np.ndarray | None = None,
-        weights: np.ndarray | None = None,
-        payoffs: np.ndarray | None = None,
-        inter_coefs: np.ndarray | None = None,
-        timelimit: int | None = None,
+        current_sol: np.ndarray = None,
+        weights: np.ndarray = None,
+        payoffs: np.ndarray = None,
+        inter_coefs: np.ndarray = None,
+        timelimit: int = None,
     ) -> np.ndarray:
         if current_sol is None:
             if self.solution is None:
@@ -118,7 +122,6 @@ class KnapsackPackingGame:
         else:
             ic = inter_coefs
 
-
         model = gp.Model("KPG player")
 
         x = model.addMVar((self.m), vtype=GRB.BINARY, name="x")
@@ -126,8 +129,7 @@ class KnapsackPackingGame:
         model.setObjective(
             x @ p[player]
             + gp.quicksum(
-                x * solution[opp] @ ic[player, opp]
-                for opp in self.opps[player]
+                x * solution[opp] @ ic[player, opp] for opp in self.opps[player]
             ),
             GRB.MAXIMIZE,
         )
@@ -173,10 +175,10 @@ class KnapsackPackingGame:
     def obj_value(
         self,
         player: int,
-        solution: np.ndarray | None = None,
-        player_solution: np.ndarray | None = None,
-        payoffs: np.ndarray | None = None,
-        inter_coefs: np.ndarray | None = None,
+        solution: np.ndarray = None,
+        player_solution: np.ndarray = None,
+        payoffs: np.ndarray = None,
+        inter_coefs: np.ndarray = None,
     ) -> int:
         """
         Calculates the objective value for a player based on a given solution.
@@ -186,10 +188,10 @@ class KnapsackPackingGame:
 
         Args:
             player (int): Index of the player.
-            solution (np.ndarray | None, optional): Solution matrix. Defaults to None.
-            player_solution (np.ndarray | None, optional): Player solution vector. Defaults to None.
-            payoffs (np.ndarray | None, optional): Replacement matrix. Defaults to None.
-            inter_coefs (np.ndarray | None, optional): Replacement matrix. Defaults to None.
+            solution (np.ndarray, optional): Solution matrix. Defaults to None.
+            player_solution (np.ndarray, optional): Player solution vector. Defaults to None.
+            payoffs (np.ndarray, optional): Replacement matrix. Defaults to None.
+            inter_coefs (np.ndarray, optional): Replacement matrix. Defaults to None.
 
         Returns:
             int: Objective value of player under the given solution, payoffs and inter_coefs.
@@ -252,44 +254,13 @@ def generate_random_KPG(
         for p in range(n):
             interactions[p, p, j] = 0
 
-    capacity = [capacity * weights[p].sum() for p in range(n)]
-
     kpg = KnapsackPackingGame(weights, payoffs, interactions, capacity)
 
     return kpg
 
 
-def read_file(file: str) -> KnapsackPackingGame:
-    with open(file) as f:
-        lines = [line.strip() for line in f]
-
-    n, m = [int(i) for i in lines[0].split(" ")]
-    capacity = [int(i) for i in lines[1].split(" ")]
-    weights = np.zeros((n, m))
-    payoffs = np.zeros((n, m))
-    interaction_coefs = np.zeros((n, n, m))
-
-    for j, line in enumerate(lines[2:]):
-        line = [int(i) for i in line.split()][1:]
-        for p in range(n):
-            payoffs[p, j] = line[p * 2]
-            weights[p, j] = line[p * 2 + 1]
-        coef_list = line[2 * n :]
-        index = 0
-        for p1 in range(n):
-            for p2 in range(n):
-                if p1 == p2:
-                    continue
-                interaction_coefs[p1, p2, j] = coef_list[index]
-                index += 1
-
-    kpg = KnapsackPackingGame(weights, payoffs, interaction_coefs, capacity)
-
-    return kpg
-
-
 def zero_regrets_kpg(
-    kpg: KnapsackPackingGame,  timelimit: int | None = None, verbose=False
+    kpg: KnapsackPackingGame, timelimit: int = None, verbose=False
 ) -> IPGResult:
     """
     Solves kpg using the ZeroRegrets methods of cutting.
@@ -297,7 +268,7 @@ def zero_regrets_kpg(
     Args:
         kpg (KPG): KPG problem.
         verbose (bool, optional): Print progress?. Defaults to False.
-        timelimit (int | None, optional): Runtime limit in seconds. Defaults to None.
+        timelimit (int, optional): Runtime limit in seconds. Defaults to None.
 
     Returns:
         IPGResult: Object with all solving information.

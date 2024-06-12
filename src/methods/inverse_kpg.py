@@ -1,4 +1,5 @@
 from time import time
+from typing import List
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -16,15 +17,15 @@ def generate_weight_problems(
     n: int,
     m: int,
     r: int = 100,
-    capacity: float | list[float] | list[list[float]] | None = None,
+    capacity: float | List[float] | List[List[float]] = None,
     corr=True,
     inter_factor=3,
     neg_inter=False,
-    approx_options: ApproxOptions | None = None,
-    rng: Generator | None = None,
+    approx_options: ApproxOptions = None,
+    rng: Generator = None,
     verbose=False,
     solve=True,
-) -> list[KnapsackPackingGame]:
+) -> List[KnapsackPackingGame]:
     """
     Generate KnapsackPackingGame instances with a shared weights matrix.
 
@@ -33,17 +34,17 @@ def generate_weight_problems(
         n (int): Number of players.
         m (int): Number of items.
         r (int, optional): Range of payoff, weight and interaction values. Defaults to 100.
-        capacity (float | list[float] | list[list[float]] | None, optional): Fractional capacity of instances. Defaults to None.
+        capacity (float | List[float] | List[List[float]], optional): Fractional capacity of instances. Defaults to None.
         corr (bool, optional): Should weights and payoffs be correlated?. Defaults to True.
         inter_factor (int, optional): Denominator to limit the influence of interaction. Defaults to 3.
         neg_inter (bool, optional): Allow for negative interactions. Defaults to False.
-        approx_options (ApproxOptions | None, optional): How to deal with approximate solutions?. Defaults to None.
-        rng (Generator | None, optional): Random number generator. Defaults to None.
+        approx_options (ApproxOptions, optional): How to deal with approximate solutions?. Defaults to None.
+        rng (Generator, optional): Random number generator. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
         solve (bool, optional): Solve all problems and check solvability. Defaults to True.
 
     Returns:
-        list[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
+        List[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -75,7 +76,9 @@ def generate_weight_problems(
             payoffs = rng.integers(1, r + 1, (n, m))
 
         if neg_inter:
-            interactions = rng.integers(- np.floor(r / inter_factor), np.floor(r / inter_factor) + 1, (n, n, m))
+            interactions = rng.integers(
+                -np.floor(r / inter_factor), np.floor(r / inter_factor) + 1, (n, n, m)
+            )
         else:
             interactions = rng.integers(0, np.floor(r / inter_factor) + 1, (n, n, m))
 
@@ -83,7 +86,10 @@ def generate_weight_problems(
             interactions[i, i, :] = 0
 
         problem = KnapsackPackingGame(
-            weights, payoffs, interactions, np.floor(list(capacity[len(problems)] * weight_sum)).astype(int)
+            weights,
+            payoffs,
+            interactions,
+            capacity[len(problems)],
         )
 
         if solve:
@@ -105,15 +111,15 @@ def generate_payoff_problems(
     n: int,
     m: int,
     r: int = 100,
-    capacity: float | list[float] | list[list[float]] | None = None,
+    capacity: float | List[float] | List[List[float]] = None,
     corr=True,
     inter_factor=3,
     neg_inter=False,
-    approx_options: ApproxOptions | None = None,
+    approx_options: ApproxOptions = None,
     rng=None,
     verbose=False,
     solve=True,
-) -> list[KnapsackPackingGame]:
+) -> List[KnapsackPackingGame]:
     """
     Generate KnapsackPackingGame instances with a shared weights matrix.
 
@@ -122,17 +128,17 @@ def generate_payoff_problems(
         n (int): Number of players.
         m (int): Number of items.
         r (int, optional): Range of payoff, weight and interaction values. Defaults to 100.
-        capacity (float | list[float] | list[list[float]] | None, optional): Fractional capacity of instances. Defaults to None.
+        capacity (float | List[float] | List[List[float]], optional): Fractional capacity of instances. Defaults to None.
         corr (bool, optional): Should weights and payoffs be correlated?. Defaults to True.
         inter_factor (int, optional): Denominator to limit the influence of interaction. Defaults to 3.
         neg_inter (bool, optional): Allow for negative interactions. Defaults to False.
-        approx_options (ApproxOptions | None, optional): How to deal with approximate solutions?. Defaults to None.
-        rng (Generator | None, optional): Random number generator. Defaults to None.
+        approx_options (ApproxOptions, optional): How to deal with approximate solutions?. Defaults to None.
+        rng (Generator, optional): Random number generator. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
         solve (bool, optional): Solve all problems and check solvability. Defaults to True.
 
     Returns:
-        list[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
+        List[KnapsackPackingGame]: KnapsackPackingGame instances with the same weights vector.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -163,7 +169,9 @@ def generate_payoff_problems(
             weights = rng.integers(1, r + 1, (n, m))
 
         if neg_inter:
-            interactions = rng.integers(- np.floor(r / inter_factor), np.floor(r / inter_factor) + 1, (n, n, m))
+            interactions = rng.integers(
+                -np.floor(r / inter_factor), np.floor(r / inter_factor) + 1, (n, n, m)
+            )
         else:
             interactions = rng.integers(0, np.floor(r / inter_factor) + 1, (n, n, m))
 
@@ -174,7 +182,7 @@ def generate_payoff_problems(
             weights,
             payoffs,
             interactions,
-            np.floor(list(capacity[len(problems)] * weights.sum(axis=1))).astype(int),
+            capacity[len(problems)],
         )
 
         if solve:
@@ -192,13 +200,16 @@ def generate_payoff_problems(
 
 
 def inverse_weights(
-    problems: list[KnapsackPackingGame], timelimit: float | None = None, sub_timelimit: int | None = None, verbose=False
+    problems: List[KnapsackPackingGame],
+    timelimit: float = None,
+    sub_timelimit: int = None,
+    verbose=False,
 ) -> np.ndarray:
     """
     Determine the shared weights matrix of the problems using inverse optimization.
 
     Args:
-        problems (list[KnapsackPackingGame]): KnapsackPackingGames with the same weights matrix.
+        problems (List[KnapsackPackingGame]): KnapsackPackingGames with the same weights matrix.
         sub_timelimit (int | Non e, optional): Soft timelimit for solving player problems. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
 
@@ -276,14 +287,17 @@ def inverse_weights(
 
 
 def inverse_payoffs(
-    problems: list[KnapsackPackingGame], timelimit: float | None = None, sub_timelimit: int | None = None, verbose=False
+    problems: List[KnapsackPackingGame],
+    timelimit: float = None,
+    sub_timelimit: int = None,
+    verbose=False,
 ) -> np.ndarray:
     """
     Determine the shared payoffs matrix of the problems using inverse optimization.
     Combines the delta and direct method.
 
     Args:
-        problems (list[KnapsackPackingGame]): KnapsackPackingGames with the same payoffs matrix.
+        problems (ListKnapsackPackingGame]): KnapsackPackingGames with the same payoffs matrix.
         sub_timelimit (int | Non e, optional): Soft timelimit for solving player problems. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
 

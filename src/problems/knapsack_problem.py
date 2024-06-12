@@ -1,37 +1,35 @@
-from dataclasses import dataclass
-
+from pydantic import BaseModel, ConfigDict
 import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
 
 
-@dataclass
-class KnapsackProblem:
+class KnapsackProblem(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     # Class for storing KP instances.
     n: int  # number of items
     payoffs: np.ndarray  # payoffs of items, (n)
     weights: np.ndarray  # weights of items, (n)
     capacity: int  # problem capacity
-    solution: np.ndarray | None  # optimal solution to the KP
+    solution: np.ndarray = None  # optimal solution to the KP
 
-    def __init__(self, payoffs: np.ndarray, weights: np.ndarray, capacity: float | int):
-        self.payoffs = payoffs
-        self.weights = weights
-        self.capacity = int(
-            capacity
-        )  # Round capacity to one digit to prevent boundary problems
-        self.solution = None  # Lazy class. Call self.solve() to solve.
-        self.n = len(payoffs)
+    def __init__(self, payoffs: np.ndarray, weights: np.ndarray, capacity: float):
+        n = len(payoffs)
+        capacity = int(capacity * weights.sum())
 
-    def solve(self, payoffs: np.ndarray | None = None, weights: np.ndarray | None = None) -> np.ndarray:
+        super().__init__(n=n, payoffs=payoffs, weights=weights, capacity=capacity)
+
+    def solve(
+        self, payoffs: np.ndarray = None, weights: np.ndarray = None
+    ) -> np.ndarray:
         """
         Solves the Knapsack Problem maximising x @ self.payoffs constrained by
         x @ self.weights <= self.capacity where the vector x is binary.
         The function also updates self.solution if that was still None.
 
         Args:
-            payoffs (np.ndarray | None, optional): A replacement payoffs vector. Defaults to None.
-            weights (np.ndarray | None, optional): A replacement weights vector. Defaults to None.
+            payoffs (np.ndarray, optional): A replacement payoffs vector. Defaults to None.
+            weights (np.ndarray, optional): A replacement weights vector. Defaults to None.
 
         Raises:
             ValueError: The KP is infeasible.

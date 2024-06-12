@@ -1,3 +1,4 @@
+from typing import List
 from time import time
 
 import gurobipy as gp
@@ -6,7 +7,6 @@ import numpy as np
 from numpy.random import Generator
 
 from problems.knapsack_problem import KnapsackProblem
-from problems.utils import rel_error
 
 eps = 0.001
 
@@ -15,10 +15,10 @@ def generate_weight_problems(
     size: int,
     n: int,
     r: int = 100,
-    capacity: float | list[float] | None = None,
+    capacity: float | List[float] = None,
     corr=True,
-    rng: Generator | None = None,
-) -> list[KnapsackProblem]:
+    rng: Generator = None,
+) -> List[KnapsackProblem]:
     """
     Generates KnapsackProblem instances with the same weights vector.
 
@@ -26,12 +26,12 @@ def generate_weight_problems(
         size (int, optional): Number of instances.
         n (int, optional): Number of items.
         r (int, optional): Range of payoff and weight values. Defaults to 100.
-        capacity (float | list[float] | None, optional): Fractional capacity of instances. Defaults to None.
+        capacity (float | List[float], optional): Fractional capacity of instances. Defaults to None.
         corr (bool, optional): Should weights and payoffs be correlated?. Defaults to True.
-        rng (Generator | None, optional): Random number generator. Defaults to None.
+        rng (Generator, optional): Random number generator. Defaults to None.
 
     Returns:
-        list[KnapsackProblem]: KnapsackProblem instances with the same weights vector.
+        List[KnapsackProblem]: KnapsackProblem instances with the same weights vector.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -41,11 +41,9 @@ def generate_weight_problems(
     weight_sum = weights.sum()
 
     if capacity is None:
-        capacity: list[float] = list(rng.uniform(0.2, 0.8, size))
+        capacity = rng.uniform(0.2, 0.8, size).tolist()
     elif isinstance(capacity, float):
-        capacity: list[float] = [capacity for _ in range(size)]
-    else:
-        capacity: list[float] = capacity
+        capacity = [capacity for _ in range(size)]
 
     if corr:
         lower = np.maximum(weights - r / 5, 1)
@@ -56,7 +54,7 @@ def generate_weight_problems(
             payoffs = rng.integers(lower, upper)
         else:
             payoffs = rng.integers(1, r + 1, n)
-        problem = KnapsackProblem(payoffs, weights, capacity[i] * weight_sum)
+        problem = KnapsackProblem(payoffs, weights, capacity[i])
         problem.solve()
         problems.append(problem)
 
@@ -67,10 +65,10 @@ def generate_payoff_problems(
     size: int,
     n: int = 10,
     r: int = 100,
-    capacity: float | list[float] | None = None,
+    capacity: float | List[float] = None,
     corr=True,
-    rng: Generator | None = None,
-) -> list[KnapsackProblem]:
+    rng: Generator = None,
+) -> List[KnapsackProblem]:
     """
     Generates KnapsackProblem instances with the same payoffs vector.
 
@@ -78,12 +76,12 @@ def generate_payoff_problems(
         size (int): Number of instances
         n (int, optional): Number of items. Defaults to 10.
         r (int, optional): Range of payoff and weight values. Defaults to 100.
-        capacity (float | list[float] | None, optional): Fractional capacity of instances. Defaults to None.
+        capacity (float | List[float], optional): Fractional capacity of instances. Defaults to None.
         corr (bool, optional): Should weights and payoffs be correlated?. Defaults to True.
-        rng (Generator | None, optional): Random number generator. Defaults to None.
+        rng (Generator, optional): Random number generator. Defaults to None.
 
     Returns:
-        list[KnapsackProblem]: KnapsackProblem instances with the same payoffs vector.
+        List[KnapsackProblem]: KnapsackProblem instances with the same payoffs vector.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -92,9 +90,9 @@ def generate_payoff_problems(
     payoffs = rng.integers(1, r + 1, n)
 
     if capacity is None:
-        capacity: list[float] = list(rng.uniform(0.2, 0.8, size))
+        capacity = list(rng.uniform(0.2, 0.8, size))
     elif isinstance(capacity, float):
-        capacity: list[float] = [capacity for _ in range(size)]
+        capacity = [capacity for _ in range(size)]
 
     if corr:
         lower = np.maximum(payoffs - np.ceil(payoffs - r / 5), 1)
@@ -105,19 +103,21 @@ def generate_payoff_problems(
             weights = rng.integers(lower, upper, n)
         else:
             weights = rng.integers(1, r + 1, n)
-        problem = KnapsackProblem(payoffs, weights, capacity[i] * weights.sum())
+        problem = KnapsackProblem(payoffs, weights, capacity[i])
         problem.solve()
         problems.append(problem)
 
     return problems
 
 
-def inverse_weights(problems: list[KnapsackProblem], timelimit: float | None = None, verbose=False) -> np.ndarray:
+def inverse_weights(
+    problems: List[KnapsackProblem], timelimit: float = None, verbose=False
+) -> np.ndarray:
     """
     Determine the shared weights vector of the problems using inverse optimization.
 
     Args:
-        problems (list[KnapsackProblem]): KnapsackProblems with the same weights vector.
+        problems (List[KnapsackProblem]): KnapsackProblems with the same weights vector.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
 
     Raises:
@@ -163,15 +163,15 @@ def inverse_weights(problems: list[KnapsackProblem], timelimit: float | None = N
 
         if not new_constraint:
             break
-        
+
         model.optimize()
 
-        while model.SolCount == 0:        
+        while model.SolCount == 0:
             if timelimit is not None and time() - start >= timelimit:
                 return current_w.astype(int)
-            
+
             model.optimize()
-            
+
         if verbose:
             error = np.abs(weights - w.X).sum()
             print(error, error / weights.sum())
@@ -189,14 +189,16 @@ def inverse_weights(problems: list[KnapsackProblem], timelimit: float | None = N
     return inverse.astype(int)
 
 
-def inverse_payoffs_delta(problems: list[KnapsackProblem], timelimit: float | None = None, verbose=False) -> np.ndarray:
+def inverse_payoffs_delta(
+    problems: List[KnapsackProblem], timelimit: float = None, verbose=False
+) -> np.ndarray:
     """
     Determine the shared payoffs vector of the problems using inverse optimization.
     This method uses the delta method which maximises the difference between the
     objective value of the true solution and candidate alternatives.
 
     Args:
-        problems (list[KnapsackProblem]): KnapsackProblems with a shared payoffs vector.
+        problems (List[KnapsackProblem]): KnapsackProblems with a shared payoffs vector.
         verbose (bool, Optional): Report progress. Defaults to False.
 
     Raises:
@@ -251,16 +253,16 @@ def inverse_payoffs_delta(problems: list[KnapsackProblem], timelimit: float | No
         while model.SolCount == 0:
             if timelimit is not None and time() - start >= timelimit:
                 return current_p.astype(int)
-            
+
             model.optimize()
-        
+
         if verbose:
             error = np.abs(payoffs - p.X).sum()
             print(error, error / payoffs.sum())
 
         if np.array_equal(current_p, p.X):
             break
-            
+
         if timelimit is not None and time() - start >= timelimit:
             break
 

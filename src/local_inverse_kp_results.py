@@ -51,15 +51,41 @@ for n in n_items:
             if runs % 10 == 0:
                 print(f"{runs} out of {total_runs} done!")
 
-        payoff_data.append([n, r, np.mean(payoff_results), np.std(payoff_results),
-                            np.min(payoff_results), np.max(payoff_results), np.mean(p_change)])
-        weight_data.append([n, r, np.mean(weight_results), np.std(weight_results),
-                            np.min(weight_results), np.max(weight_results), np.mean(w_change)])
+        payoff_data.append(
+            [
+                n,
+                r,
+                np.mean(payoff_results),
+                np.std(payoff_results),
+                np.min(payoff_results),
+                np.max(payoff_results),
+                np.mean(p_change),
+            ]
+        )
+        weight_data.append(
+            [
+                n,
+                r,
+                np.mean(weight_results),
+                np.std(weight_results),
+                np.min(weight_results),
+                np.max(weight_results),
+                np.mean(w_change),
+            ]
+        )
 
     print(f"{n} items done")
 
 payoff_df = pd.DataFrame(payoff_data, columns=header)
-payoff_df.to_csv(f"./results/kp/local/local_inverse_kp-payoffs-{repeats}.csv", float_format="%6.3f", index=False)
+payoff_df.to_csv(
+    f"./results/kp/local/local_inverse_kp-payoffs-{repeats}.csv",
+    float_format="%6.3f",
+    index=False,
+)
 
 weight_df = pd.DataFrame(weight_data, columns=header)
-weight_df.to_csv(f"./results/kp/local/local_inverse_kp-weights-{repeats}.csv", float_format="%6.3f", index=False)
+weight_df.to_csv(
+    f"./results/kp/local/local_inverse_kp-weights-{repeats}.csv",
+    float_format="%6.3f",
+    index=False,
+)

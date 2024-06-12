@@ -1,4 +1,5 @@
 from time import time
+from typing import Tuple
 
 import numpy as np
 import gurobipy as gp
@@ -41,12 +42,17 @@ def local_inverse_weights(problem: KnapsackPackingGame, timelimit=None) -> np.nd
         for p in problem.players
     )
 
+    new_constraint = True
 
-    model.optimize()
-    if model.Status == GRB.INFEASIBLE:
-        raise ValueError("Problem is initially Infeasible")
+    while new_constraint:
+        if timelimit is not None and time() - start >= timelimit:
+            raise ValueError("Time limit reached!")
 
-    while True:
+        model.optimize()
+
+        if model.Status == GRB.INFEASIBLE:
+            raise ValueError("Problem is Infeasible")
+
         new_constraint = False
         current_w = w.X
 
@@ -64,20 +70,6 @@ def local_inverse_weights(problem: KnapsackPackingGame, timelimit=None) -> np.nd
                 model.addConstr(new_player_x @ w[p] >= problem.capacity[p] + eps)
                 new_constraint = True
 
-        if not new_constraint:
-            break
-
-        model.optimize()
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible")
-
-        if np.array_equal(current_w, w.X):
-            break
-
-        if timelimit is not None and time() - start >= timelimit:
-            raise ValueError("Time limit reached!")
-
     inverse = w.X
 
     model.close()
@@ -85,7 +77,9 @@ def local_inverse_weights(problem: KnapsackPackingGame, timelimit=None) -> np.nd
     return inverse.astype(int)
 
 
-def local_inverse_payoffs(problem: KnapsackPackingGame, timelimit=None) -> tuple[np.ndarray, np.ndarray]:
+def local_inverse_payoffs(
+    problem: KnapsackPackingGame, timelimit=None
+) -> Tuple[np.ndarray, np.ndarray]:
     start = time()
 
     greedy_solution = problem.solve_greedy()
@@ -143,13 +137,18 @@ def local_inverse_payoffs(problem: KnapsackPackingGame, timelimit=None) -> tuple
         for j in problem.players
     ]
 
-    model.optimize()
-    if model.Status == GRB.INFEASIBLE:
-        raise ValueError("Problem is initially Infeasible")
-
+    new_constraint = True
     solutions = [set() for _ in problem.players]
 
-    while True:
+    while new_constraint:
+        if timelimit is not None and time() - start >= timelimit:
+            raise ValueError("Time limit reached!")
+
+        model.optimize()
+
+        if model.Status == GRB.INFEASIBLE:
+            raise ValueError("Problem is Infeasible")
+
         new_constraint = False
         current_p = p.X
         current_i = inter.X
@@ -163,28 +162,13 @@ def local_inverse_payoffs(problem: KnapsackPackingGame, timelimit=None) -> tuple
                 continue
 
             new_value = new_player_x @ p[j] + sum(
-                new_player_x * greedy_solution[o] @ inter[j, o]
-                for o in problem.opps[j]
+                new_player_x * greedy_solution[o] @ inter[j, o] for o in problem.opps[j]
             )
 
             if new_value.getValue() >= true_values[j].getValue():
                 model.addConstr(new_value <= true_values[j])
                 new_constraint = True
                 solutions[j].add(tuple(new_player_x))
-
-        if not new_constraint:
-            break
-
-        model.optimize()
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible")
-
-        if np.array_equal(current_p, p.X) and np.array_equal(current_i, inter.X):
-            break
-
-        if timelimit is not None and time() - start >= timelimit:
-            raise ValueError("Time limit reached!")
 
     inverse_p = p.X
     inverse_i = inter.X
