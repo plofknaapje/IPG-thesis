@@ -1,5 +1,5 @@
 from time import time
-from typing import Tuple
+from typing import Tuple, Optional
 
 import numpy as np
 import gurobipy as gp
@@ -50,15 +50,23 @@ def local_inverse_weights(
         delta[j, i] >= problem.weights[j, i] - w[j, i] for i in i_range for j in [0, 1]
     )
 
-    model.optimize()
-    if timelimit is not None:
-        local_timelimit -= model.Runtime
-        model.params.TimeLimit = max(1, local_timelimit)
+    new_constraint = True
 
-    if model.Status == GRB.INFEASIBLE:
-        raise ValueError("Problem is initially infeasible")
+    while new_constraint:
+        model.optimize()
+        if timelimit is not None:
+            local_timelimit -= model.Runtime
+            model.params.TimeLimit = max(1, local_timelimit)
 
-    while True:
+        if model.Status == GRB.TIME_LIMIT or (
+            timelimit is not None and time() - start >= timelimit
+        ):
+            print("Timelimit reached")
+            raise UserWarning("Timelimit reached")
+
+        if model.Status == GRB.INFEASIBLE:
+            raise ValueError("Problem is initially infeasible")
+
         new_constraint = False
         current_w = w.X
 
@@ -76,26 +84,6 @@ def local_inverse_weights(
             model.addConstr(new_att_x @ w[1] >= problem.capacity[1] + eps)
             new_constraint = True
 
-        if not new_constraint:
-            break
-
-        model.optimize()
-        if timelimit is not None:
-            local_timelimit -= model.Runtime
-            model.params.TimeLimit = max(1, local_timelimit)
-
-        if model.Status == GRB.TIME_LIMIT or (
-            timelimit is not None and time() - start >= timelimit
-        ):
-            print("Timelimit reached")
-            raise UserWarning("Timelimit reached")
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible")
-
-        if np.array_equal(current_w, w.X):
-            break
-
     inverse = w.X
 
     model.close()
@@ -104,7 +92,10 @@ def local_inverse_weights(
 
 
 def local_inverse_payoffs(
-    problem: CriticalNodeGame, defender=True, max_phi: int = None, timelimit=None
+    problem: CriticalNodeGame,
+    defender=True,
+    max_phi: Optional[int] = None,
+    timelimit=None,
 ) -> Tuple[np.ndarray, int]:
     start = time()
     if timelimit is not None:
@@ -152,17 +143,36 @@ def local_inverse_payoffs(
         + (1 - problem.mitigated) * defence * attack
     )
 
-    model.optimize()
-    if timelimit is not None:
-        local_timelimit -= model.Runtime
-        model.params.TimeLimit = max(1, local_timelimit)
-
-    if model.Status == GRB.INFEASIBLE:
-        raise ValueError("Problem is initially Infeasible")
+    new_constraint = True
 
     solutions = [set(), set()]
 
-    while True:
+    while new_constraint:
+        model.optimize()
+
+        if timelimit is not None:
+            local_timelimit -= model.Runtime
+            model.params.TimeLimit = max(1, local_timelimit)
+
+        while model.Status == GRB.INFEASIBLE:
+            phi_ub += 1
+            phi.ub = phi_ub
+
+            if max_phi is not None and phi_ub > max_phi:
+                raise ValueError("Problem is Infeasible")
+            model.optimize()
+
+            if model.Status == GRB.TIME_LIMIT or (
+                timelimit is not None and time() - start >= timelimit
+            ):
+                break
+
+        if model.Status == GRB.TIME_LIMIT or (
+            timelimit is not None and time() - start >= timelimit
+        ):
+            print("Timelimit reached")
+            raise UserWarning("Timelimit reached")
+
         new_constraint = False
         current_p = p.X
 
@@ -196,33 +206,6 @@ def local_inverse_payoffs(
             model.addConstr(new_att_obj <= true_objs[1] + phi)
             solutions[1].add(tuple(new_att_x))
             new_constraint = True
-
-        if not new_constraint:
-            break
-
-        model.optimize()
-        if timelimit is not None:
-            local_timelimit -= model.Runtime
-            model.params.TimeLimit = max(1, local_timelimit)
-
-        while model.Status == GRB.INFEASIBLE:
-            phi_ub += 1
-            phi.ub = phi_ub
-
-            if max_phi is not None and phi_ub > max_phi:
-                raise ValueError("Problem is Infeasible")
-            model.optimize()
-
-            if model.Status == GRB.TIME_LIMIT or (
-                timelimit is not None and time() - start >= timelimit
-            ):
-                break
-
-        if model.Status == GRB.TIME_LIMIT or (
-            timelimit is not None and time() - start >= timelimit
-        ):
-            print("Timelimit reached")
-            raise UserWarning("Timelimit reached")
 
     inverse = p.X
 

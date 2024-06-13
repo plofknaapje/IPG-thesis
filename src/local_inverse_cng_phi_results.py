@@ -16,7 +16,7 @@ r = 25
 
 n_nodes = [20, 30, 40, 50]
 mitigated = [0.6, 0.75]
-cap = [0.3, 0.03]
+cap = (0.3, 0.03)
 
 weight_data = []
 payoff_data = []

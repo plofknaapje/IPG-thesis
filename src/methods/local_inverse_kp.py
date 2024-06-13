@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 from numpy.random import Generator
 import gurobipy as gp
@@ -11,9 +13,9 @@ eps = 0.001
 def generate_problem(
     n: int,
     r: int = 100,
-    capacity: float = None,
+    capacity: Optional[float] = None,
     corr: bool = True,
-    rng: Generator = None,
+    rng: Optional[Generator] = None,
 ) -> KnapsackProblem:
     """
     Generates a single KnapsackProblem.
@@ -77,11 +79,11 @@ def local_inverse_weights(problem: KnapsackProblem) -> np.ndarray:
     model.addConstrs(delta[i] >= w[i] - problem.weights[i] for i in i_range)
     model.addConstrs(delta[i] >= problem.weights[i] - w[i] for i in i_range)
 
-    model.optimize()
-    if model.Status == GRB.INFEASIBLE:
-        raise ValueError("Problem is Infeasible!")
-
     while True:
+        model.optimize()
+        if model.Status == GRB.INFEASIBLE:
+            raise ValueError("Problem is Infeasible!")
+
         new_solution = problem.solve(weights=w.X)
 
         if new_solution @ problem.payoffs >= greedy_solution @ problem.payoffs + eps:
@@ -90,16 +92,11 @@ def local_inverse_weights(problem: KnapsackProblem) -> np.ndarray:
         elif new_solution @ problem.payoffs <= greedy_solution @ problem.payoffs:
             break
 
-        model.optimize()
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible!")
-
-    result = w.X.astype(int)
+    inverse = w.X
 
     model.close()
 
-    return result
+    return inverse.astype(int)
 
 
 def local_inverse_payoffs(problem: KnapsackProblem) -> np.ndarray:
@@ -131,14 +128,14 @@ def local_inverse_payoffs(problem: KnapsackProblem) -> np.ndarray:
     model.addConstrs(delta[i] >= p[i] - problem.payoffs[i] for i in i_range)
     model.addConstrs(delta[i] >= problem.payoffs[i] - p[i] for i in i_range)
 
-    model.optimize()
-
-    if model.Status == GRB.INFEASIBLE:
-        raise ValueError("Problem is Infeasible!")
-
     solutions = set()
 
     while True:
+        model.optimize()
+
+        if model.Status == GRB.INFEASIBLE:
+            raise ValueError("Problem is Infeasible!")
+
         new_payoffs = p.X
         new_solution = problem.solve(payoffs=new_payoffs)
 
@@ -148,11 +145,6 @@ def local_inverse_payoffs(problem: KnapsackProblem) -> np.ndarray:
         solutions.add(tuple(new_solution))
 
         model.addConstr(p @ greedy_solution >= p @ new_solution)
-
-        model.optimize()
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible!")
 
     result = p.X.astype(int)
 

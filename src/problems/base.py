@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Optional
 
 from pydantic import ConfigDict
 from pydantic.dataclasses import dataclass
@@ -6,8 +7,10 @@ import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
 
+allow_nparray = ConfigDict(arbitrary_types_allowed=True)
 
-@dataclass(config=ConfigDict(arbitrary_types_allowed=True))
+
+@dataclass(config=allow_nparray)
 class IPGResult:
     PNE: bool
     X: np.ndarray
@@ -20,7 +23,7 @@ class IPGResult:
 @dataclass
 class ApproxOptions:
     allow_phi_ne: bool = False
-    timelimit: int = None
+    timelimit: Optional[int] = None
     allow_timelimit_reached: bool = False
 
     def valid_problem(self, result: IPGResult) -> bool:

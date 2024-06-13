@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from time import time
 
 import gurobipy as gp
@@ -17,7 +17,7 @@ def generate_weight_problems(
     r: int = 100,
     capacity: float | List[float] = None,
     corr=True,
-    rng: Generator = None,
+    rng: Optional[Generator] = None,
 ) -> List[KnapsackProblem]:
     """
     Generates KnapsackProblem instances with the same weights vector.
@@ -67,7 +67,7 @@ def generate_payoff_problems(
     r: int = 100,
     capacity: float | List[float] = None,
     corr=True,
-    rng: Generator = None,
+    rng: Optional[Generator] = None,
 ) -> List[KnapsackProblem]:
     """
     Generates KnapsackProblem instances with the same payoffs vector.
@@ -111,7 +111,7 @@ def generate_payoff_problems(
 
 
 def inverse_weights(
-    problems: List[KnapsackProblem], timelimit: float = None, verbose=False
+    problems: List[KnapsackProblem], timelimit: Optional[float] = None, verbose=False
 ) -> np.ndarray:
     """
     Determine the shared weights vector of the problems using inverse optimization.
@@ -144,14 +144,30 @@ def inverse_weights(
     for problem in problems:
         model.addConstr(problem.solution @ w <= problem.capacity)
 
-    model.optimize()
+    new_constraint = True
+    current_w = np.ones_like(weights)
 
-    if model.Status == GRB.INFEASIBLE:
-        raise ValueError("Problem is Infeasible!")
+    while new_constraint:
+        model.optimize()
 
-    while True:
+        while model.SolCount == 0:
+            if timelimit is not None and time() - start >= timelimit:
+                return current_w.astype(int)
+
+            model.optimize()
+
+        if model.Status == GRB.INFEASIBLE:
+            raise ValueError("Problem is Infeasible!")
+
+        if timelimit is not None and time() - start >= timelimit:
+            break
+
         new_constraint = False
         current_w = w.X
+
+        if verbose:
+            error = np.abs(weights - w.X).sum()
+            print(error, error / weights.sum())
 
         for i, problem in enumerate(problems):
             new_x = problem.solve(weights=w.X)
@@ -161,27 +177,6 @@ def inverse_weights(
                 model.addConstr(new_x @ w >= problem.capacity + eps)
                 new_constraint = True
 
-        if not new_constraint:
-            break
-
-        model.optimize()
-
-        while model.SolCount == 0:
-            if timelimit is not None and time() - start >= timelimit:
-                return current_w.astype(int)
-
-            model.optimize()
-
-        if verbose:
-            error = np.abs(weights - w.X).sum()
-            print(error, error / weights.sum())
-
-        if np.array_equal(current_w, w.X):
-            break
-
-        if timelimit is not None and time() - start >= timelimit:
-            break
-
     inverse = w.X
 
     model.close()
@@ -190,7 +185,7 @@ def inverse_weights(
 
 
 def inverse_payoffs_delta(
-    problems: List[KnapsackProblem], timelimit: float = None, verbose=False
+    problems: List[KnapsackProblem], timelimit: Optional[float] = None, verbose=False
 ) -> np.ndarray:
     """
     Determine the shared payoffs vector of the problems using inverse optimization.
@@ -223,16 +218,32 @@ def inverse_payoffs_delta(
 
     model.addConstr(p.sum() == payoffs.sum())
 
-    model.optimize()
-
-    if model.Status == GRB.INFEASIBLE:
-        raise ValueError("Problem is Infeasible!")
+    current_p = np.ones_like(payoffs)
+    new_constraint = True
 
     solutions = [set() for _ in problems]
 
-    while True:
+    while new_constraint:
+        model.optimize()
+
+        while model.SolCount == 0:
+            if timelimit is not None and time() - start >= timelimit:
+                return current_p.astype(int)
+
+            model.optimize()
+
+        if model.Status == GRB.INFEASIBLE:
+            raise ValueError("Problem is Infeasible!")
+
+        if timelimit is not None and time() - start >= timelimit:
+            break
+
         new_constraint = False
         current_p = p.X
+
+        if verbose:
+            error = np.abs(payoffs - p.X).sum()
+            print(error, error / payoffs.sum())
 
         for i, problem in enumerate(problems):
             new_x = problem.solve(payoffs=p.X)
@@ -241,30 +252,6 @@ def inverse_payoffs_delta(
             model.addConstr(delta[i] >= new_x @ p - problem.solution @ p)
             new_constraint = True
             solutions[i].add(tuple(new_x))
-
-        if not new_constraint:
-            break
-
-        model.optimize()
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible!")
-
-        while model.SolCount == 0:
-            if timelimit is not None and time() - start >= timelimit:
-                return current_p.astype(int)
-
-            model.optimize()
-
-        if verbose:
-            error = np.abs(payoffs - p.X).sum()
-            print(error, error / payoffs.sum())
-
-        if np.array_equal(current_p, p.X):
-            break
-
-        if timelimit is not None and time() - start >= timelimit:
-            break
 
     inverse = p.X
 

@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 from numpy.random import Generator
@@ -14,8 +14,8 @@ def generate_weight_problems(
     n: int,
     r=25,
     parameters: CNGParams | List[CNGParams] = None,
-    approx_options: ApproxOptions = None,
-    rng: Generator = None,
+    approx_options: Optional[ApproxOptions] = None,
+    rng: Optional[Generator] = None,
     verbose=False,
 ) -> List[CriticalNodeGame]:
     if rng is None:
@@ -66,8 +66,8 @@ def generate_payoff_problems(
     n: int,
     r=25,
     parameters: CNGParams | List[CNGParams] = None,
-    approx_options: ApproxOptions = None,
-    rng: Generator = None,
+    approx_options: Optional[ApproxOptions] = None,
+    rng: Optional[Generator] = None,
     verbose=False,
 ) -> List[CriticalNodeGame]:
     if rng is None:
@@ -107,8 +107,8 @@ def generate_param_problems(
     n: int,
     parameters: CNGParams,
     r=25,
-    approx_options: ApproxOptions = None,
-    rng: Generator = None,
+    approx_options: Optional[ApproxOptions] = None,
+    rng: Optional[Generator] = None,
     verbose=False,
 ) -> List[CriticalNodeGame]:
     if rng is None:
@@ -144,7 +144,7 @@ def generate_param_problems(
 
 def inverse_payoffs(
     problems: List[CriticalNodeGame],
-    sub_timelimit: int = None,
+    sub_timelimit: Optional[int] = None,
     verbose=False,
 ) -> np.ndarray:
     n_problems = len(problems)
@@ -200,7 +200,9 @@ def inverse_payoffs(
         for i, problem in enumerate(problems):
             # Defender
             attack = problem.solution[0][1]
-            new_def_x = problem.solve_player(True, payoffs=p.X, timelimit=sub_timelimit)
+            new_def_x = problem.solve_player(
+                True, payoffs=current_p, timelimit=sub_timelimit
+            )
             if tuple(new_def_x) not in solutions[i, 0]:
                 new_def_obj = p[0] @ (
                     (1 - new_def_x) * (1 - attack)
@@ -258,6 +260,7 @@ def inverse_weights(problems: List[CriticalNodeGame], verbose=True) -> np.ndarra
 
     while new_constraint:
         model.optimize()
+
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
 
@@ -344,6 +347,11 @@ def inverse_params(problems: List[CriticalNodeGame], verbose=True) -> np.ndarray
 
         current_params = params.X
 
+        if verbose:
+            print(params.X)
+            error = np.abs(params.X - true_params).sum()
+            print(error, error / true_params.sum())
+
         for i, problem in enumerate(problems):
             # Defender
             attack = problem.solution[0][1]
@@ -375,14 +383,6 @@ def inverse_params(problems: List[CriticalNodeGame], verbose=True) -> np.ndarray
                 new_constraint = True
 
                 solutions[i, 1].add(tuple(new_att_x))
-
-        if verbose:
-            print(params.X)
-            error = np.abs(params.X - true_params).sum()
-            print(error, error / true_params.sum())
-
-        if np.array_equal(params.X, current_params):
-            break
 
     inverse = params.X
 

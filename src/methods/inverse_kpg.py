@@ -1,5 +1,5 @@
 from time import time
-from typing import List
+from typing import List, Optional
 
 import gurobipy as gp
 from gurobipy import GRB
@@ -21,8 +21,8 @@ def generate_weight_problems(
     corr=True,
     inter_factor=3,
     neg_inter=False,
-    approx_options: ApproxOptions = None,
-    rng: Generator = None,
+    approx_options: Optional[ApproxOptions] = None,
+    rng: Optional[Generator] = None,
     verbose=False,
     solve=True,
 ) -> List[KnapsackPackingGame]:
@@ -115,7 +115,7 @@ def generate_payoff_problems(
     corr=True,
     inter_factor=3,
     neg_inter=False,
-    approx_options: ApproxOptions = None,
+    approx_options: Optional[ApproxOptions] = None,
     rng=None,
     verbose=False,
     solve=True,
@@ -201,8 +201,8 @@ def generate_payoff_problems(
 
 def inverse_weights(
     problems: List[KnapsackPackingGame],
-    timelimit: float = None,
-    sub_timelimit: int = None,
+    timelimit: Optional[float] = None,
+    sub_timelimit: Optional[int] = None,
     verbose=False,
 ) -> np.ndarray:
     """
@@ -210,7 +210,7 @@ def inverse_weights(
 
     Args:
         problems (List[KnapsackPackingGame]): KnapsackPackingGames with the same weights matrix.
-        sub_timelimit (int | Non e, optional): Soft timelimit for solving player problems. Defaults to None.
+        sub_timelimit (int, optional): Soft timelimit for solving player problems. Defaults to None.
         verbose (bool, optional): Verbose outputs with progress details. Defaults to False.
 
     Raises:
@@ -241,29 +241,9 @@ def inverse_weights(
         for j in players:
             model.addConstr(problem.solution[j] @ w[j] <= problem.capacity[j])
 
-    model.optimize()
+    new_constraint = True
 
-    if model.Status == GRB.INFEASIBLE:
-        raise ValueError("Problem is Infeasible!")
-
-    while True:
-        new_constraint = False
-        current_w = w.X
-
-        for i, problem in enumerate(problems):
-            for j in players:
-                new_player_x = problem.solve_player(
-                    j, weights=w.X, timelimit=sub_timelimit
-                )
-                new_player_obj = problem.obj_value(j, player_solution=new_player_x)
-
-                if new_player_obj >= true_objs[i, j] + eps:
-                    model.addConstr(new_player_x @ w[j] >= problem.capacity[j] + eps)
-                    new_constraint = True
-
-        if not new_constraint:
-            break
-
+    while new_constraint:
         model.optimize()
 
         if model.Status == GRB.INFEASIBLE:
@@ -272,12 +252,23 @@ def inverse_weights(
         if timelimit is not None and time() - start >= timelimit:
             break
 
-        if np.array_equal(current_w, w.X):
-            break
+        new_constraint = False
+        current_w = w.X
 
         if verbose:
             error = np.abs(current_w - problems[0].weights).sum()
             print(error, error / problems[0].weights.sum())
+
+        for i, problem in enumerate(problems):
+            for j in players:
+                new_player_x = problem.solve_player(
+                    j, weights=current_w, timelimit=sub_timelimit
+                )
+                new_player_obj = problem.obj_value(j, player_solution=new_player_x)
+
+                if new_player_obj >= true_objs[i, j] + eps:
+                    model.addConstr(new_player_x @ w[j] >= problem.capacity[j] + eps)
+                    new_constraint = True
 
     inverse = w.X
 
@@ -288,8 +279,8 @@ def inverse_weights(
 
 def inverse_payoffs(
     problems: List[KnapsackPackingGame],
-    timelimit: float = None,
-    sub_timelimit: int = None,
+    timelimit: Optional[float] = None,
+    sub_timelimit: Optional[int] = None,
     verbose=False,
 ) -> np.ndarray:
     """
@@ -330,21 +321,30 @@ def inverse_payoffs(
         for j in players
     }
 
-    model.optimize()
-
-    if model.Status == GRB.INFEASIBLE:
-        raise ValueError("Problem is Infeasible!")
+    new_constraint = True
 
     solutions = {(i, j): set() for i in range(n_problems) for j in players}
 
-    while True:
+    while new_constraint:
+        model.optimize()
+
+        if timelimit is not None and time() - start >= timelimit:
+            break
+
+        if model.Status == GRB.INFEASIBLE:
+            raise ValueError("Problem is Infeasible!")
+
         new_constraint = False
         current_p = p.X  # for comparison after optimization
+
+        if verbose:
+            error = np.abs(current_p - problems[0].payoffs).sum()
+            print(error, error / problems[0].payoffs.sum())
 
         for i, problem in enumerate(problems):
             for j in players:
                 new_player_x = problem.solve_player(
-                    j, payoffs=p.X, timelimit=sub_timelimit
+                    j, payoffs=current_p, timelimit=sub_timelimit
                 )
                 if tuple(new_player_x) in solutions[i, j]:
                     continue
@@ -356,24 +356,6 @@ def inverse_payoffs(
                 model.addConstr(delta[i, j] >= new_player_obj - true_objs[i, j])
                 new_constraint = True
                 solutions[i, j].add(tuple(new_player_x))
-
-        if not new_constraint:
-            break
-
-        model.optimize()
-
-        if model.Status == GRB.INFEASIBLE:
-            raise ValueError("Problem is Infeasible!")
-
-        if timelimit is not None and time() - start >= timelimit:
-            break
-
-        if np.array_equal(p.X, current_p):
-            break
-
-        if verbose:
-            error = np.abs(current_p - problems[0].payoffs).sum()
-            print(error, error / problems[0].payoffs.sum())
 
     inverse = p.X
 

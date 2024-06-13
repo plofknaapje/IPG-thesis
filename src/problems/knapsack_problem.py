@@ -1,17 +1,21 @@
-from pydantic import BaseModel, ConfigDict
+from typing import Optional
+
+from pydantic import BaseModel
 import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
 
+from problems.base import allow_nparray
+
 
 class KnapsackProblem(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = allow_nparray
     # Class for storing KP instances.
     n: int  # number of items
     payoffs: np.ndarray  # payoffs of items, (n)
     weights: np.ndarray  # weights of items, (n)
     capacity: int  # problem capacity
-    solution: np.ndarray = None  # optimal solution to the KP
+    solution: Optional[np.ndarray] = None  # optimal solution to the KP
 
     def __init__(self, payoffs: np.ndarray, weights: np.ndarray, capacity: float):
         n = len(payoffs)
@@ -20,7 +24,7 @@ class KnapsackProblem(BaseModel):
         super().__init__(n=n, payoffs=payoffs, weights=weights, capacity=capacity)
 
     def solve(
-        self, payoffs: np.ndarray = None, weights: np.ndarray = None
+        self, payoffs: Optional[np.ndarray] = None, weights: Optional[np.ndarray] = None
     ) -> np.ndarray:
         """
         Solves the Knapsack Problem maximising x @ self.payoffs constrained by

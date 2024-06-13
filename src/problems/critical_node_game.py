@@ -1,13 +1,13 @@
 from time import time
-from typing import List
+from typing import List, Tuple, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, validate_call
 import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
 from numpy.random import Generator
 
-from problems.base import IPGResult, early_stopping
+from problems.base import IPGResult, early_stopping, allow_nparray
 
 
 class CNGParams(BaseModel):
@@ -15,34 +15,34 @@ class CNGParams(BaseModel):
     mitigated: float  # Eta
     unchallenged: float  # Epsilon
     normal: float  # Gamma
-    capacity_perc: List[float]
+    capacity_perc: Tuple[float, float]
 
     def __init__(
         self,
-        success: float = None,
-        mitigated: float = None,
-        unchallenged: float = None,
-        normal: float = None,
-        capacity_perc: List[float] = None,
-        rng: Generator = None,
+        success: Optional[float] = None,
+        mitigated: Optional[float] = None,
+        unchallenged: Optional[float] = None,
+        normal: Optional[float] = None,
+        capacity_perc: Optional[Tuple[float, float]] = None,
+        rng: Optional[Generator] = None,
     ):
         if rng is None:
             rng = np.random.default_rng()
 
         if unchallenged is None or mitigated is None or success is None:
             mitigated = np.round(rng.uniform(0.55, 0.85), 2)
-            unchallenged = self.mitigated * 1.25
-            success = self.mitigated * 0.8
+            unchallenged = mitigated * 1.25
+            success = mitigated * 0.8
 
         if normal is None:
             normal = np.round(rng.uniform(0, 0.15), 2)
 
         if capacity_perc is None:
             defender_budget = rng.uniform(0.3, 0.8)
-            capacity_perc = [
+            capacity_perc = (
                 defender_budget,
                 defender_budget / rng.integers(5, 10),
-            ]
+            )
 
         if success >= mitigated or mitigated >= unchallenged:
             raise ValueError("Invalid parameters for CNG")
@@ -66,7 +66,7 @@ class CNGParams(BaseModel):
 
 
 class CriticalNodeGame(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = allow_nparray
 
     n: int  # number of targets
     weights: np.ndarray  # costs for defender and attacker (2, n)
@@ -76,16 +76,16 @@ class CriticalNodeGame(BaseModel):
     mitigated: float  # mitigation costs / reward, eta < eps.
     success: float  # attack cost of defender. delta < eta.
     normal: float  # opportunit cost of defender.
-    solution: List[np.ndarray] = None
-    result: List[IPGResult] = None
-    PNE: bool = None
+    solution: Optional[Tuple[np.ndarray, np.ndarray]] = None
+    result: Optional[Tuple[IPGResult, IPGResult]] = None
+    PNE: Optional[bool] = None
 
     def __init__(
         self,
         weights: np.ndarray,
         payoffs: np.ndarray,
         parameters: CNGParams,
-        rng: Generator = None,
+        rng: Optional[Generator] = None,
     ):
         """
         Args:
@@ -119,7 +119,8 @@ class CriticalNodeGame(BaseModel):
             normal=normal,
         )
 
-    def solve(self, timelimit: int = None, verbose=False) -> List[IPGResult]:
+    @validate_call
+    def solve(self, timelimit: Optional[int] = None, verbose=False) -> List[IPGResult]:
         """
         Solve the CNG using zero_regrets(). Sets self.solution if this was None.
         Sets self.result too, which records the information of the solution.
@@ -136,36 +137,36 @@ class CriticalNodeGame(BaseModel):
             return self.result
 
         try:
-            self.result = [
-                zero_regrets_cng(
-                    self, defender=True, timelimit=timelimit, verbose=verbose
-                )
-            ]
-            self.result.append(
-                zero_regrets_cng(
-                    self,
-                    defender=False,
-                    timelimit=timelimit,
-                    hotstart=self.result[0].X,
-                    verbose=verbose,
-                )
+            def_result = zero_regrets_cng(
+                self, defender=True, timelimit=timelimit, verbose=verbose
             )
+            att_result = zero_regrets_cng(
+                self,
+                defender=False,
+                timelimit=timelimit,
+                hotstart=def_result.X,
+                verbose=verbose,
+            )
+
+            self.result = (def_result, att_result)
+
         except UserWarning:
             raise UserWarning
 
-        self.solution = [self.result[0].X, self.result[1].X]
+        self.solution = (self.result[0].X, self.result[1].X)
         self.PNE = self.result[0].PNE and self.result[1].PNE
 
         return self.result
 
+    @validate_call(config=allow_nparray)
     def solve_player(
         self,
         defender: bool,
-        current_sol: np.ndarray = None,
-        weights: np.ndarray = None,
-        payoffs: np.ndarray = None,
-        params: np.ndarray = None,
-        timelimit: int = None,
+        current_sol: Optional[np.ndarray] = None,
+        weights: Optional[np.ndarray] = None,
+        payoffs: Optional[np.ndarray] = None,
+        params: Optional[np.ndarray] = None,
+        timelimit: Optional[int] = None,
     ) -> np.ndarray:
         """
         Solve the partial problem for a single player given the current solution.
@@ -210,7 +211,7 @@ class CriticalNodeGame(BaseModel):
             mitigated = params[1]
             overcommit = params[2]
             normal = params[3]
-            timelimit = None
+            Optional[timelimit] = None
 
         model = gp.Model("CNG player")
 
@@ -260,6 +261,7 @@ class CriticalNodeGame(BaseModel):
 
         return result.astype(int)
 
+    @validate_call
     def solve_greedy(self, timelimit: int = 10) -> np.ndarray:
         start = time()
         solution = np.zeros((2, self.n), dtype=int)
@@ -276,12 +278,13 @@ class CriticalNodeGame(BaseModel):
 
         return solution
 
+    @validate_call(config=allow_nparray)
     def obj_value(
         self,
         defender: bool,
-        def_sol: np.ndarray = None,
-        att_sol: np.ndarray = None,
-        payoffs: np.ndarray = None,
+        def_sol: Optional[np.ndarray] = None,
+        att_sol: Optional[np.ndarray] = None,
+        payoffs: Optional[np.ndarray] = None,
     ) -> float:
         """
         Calculate the objective value for defender or attacker. If def_sol or att_sol is not given, self.solution is used.
@@ -340,11 +343,12 @@ class CriticalNodeGame(BaseModel):
         return arr
 
 
+@validate_call(config=allow_nparray)
 def generate_random_CNG(
     n: int = 20,
     r: int = 25,
-    params: CNGParams = None,
-    rng: Generator = None,
+    params: Optional[CNGParams] = None,
+    rng: Optional[Generator] = None,
 ) -> CriticalNodeGame:
     """
     Generate a random instance of the CriticalNodeGame.
@@ -367,11 +371,12 @@ def generate_random_CNG(
     return CriticalNodeGame(weights, payoffs, params, rng)
 
 
+@validate_call(config=allow_nparray)
 def zero_regrets_cng(
     cng: CriticalNodeGame,
     defender: bool = True,
-    timelimit: int = None,
-    hotstart: np.ndarray = None,
+    timelimit: Optional[int] = None,
+    hotstart: Optional[np.ndarray] = None,
     verbose=False,
 ) -> IPGResult:
     """

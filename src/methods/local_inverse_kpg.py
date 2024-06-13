@@ -45,13 +45,13 @@ def local_inverse_weights(problem: KnapsackPackingGame, timelimit=None) -> np.nd
     new_constraint = True
 
     while new_constraint:
-        if timelimit is not None and time() - start >= timelimit:
-            raise ValueError("Time limit reached!")
-
         model.optimize()
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible")
+
+        if timelimit is not None and time() - start >= timelimit:
+            raise ValueError("Time limit reached!")
 
         new_constraint = False
         current_w = w.X
@@ -141,13 +141,13 @@ def local_inverse_payoffs(
     solutions = [set() for _ in problem.players]
 
     while new_constraint:
-        if timelimit is not None and time() - start >= timelimit:
-            raise ValueError("Time limit reached!")
-
         model.optimize()
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible")
+
+        if timelimit is not None and time() - start >= timelimit:
+            raise ValueError("Time limit reached!")
 
         new_constraint = False
         current_p = p.X

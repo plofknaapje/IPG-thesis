@@ -13,7 +13,7 @@ def powerset(iterable):
     return chain.from_iterable(combinations(s, r) for r in range(len(s) + 1))
 
 
-def duplicate_array(arrays: list[np.ndarray], x: np.ndarray) -> bool:
+def duplicate_array(arrays: List[np.ndarray], x: np.ndarray) -> bool:
     # Checks if arrays contains x.
     for solution in arrays:
         if np.array_equal(solution, x):

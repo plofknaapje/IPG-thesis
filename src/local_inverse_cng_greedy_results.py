@@ -15,7 +15,7 @@ r = 25
 
 n_nodes = [50, 70, 100, 150, 200]
 mitigated = [0.6, 0.75]
-cap = [0.3, 0.03]
+cap = (0.3, 0.03)
 payoff_cutoff = 100
 
 weight_data = []
@@ -53,7 +53,7 @@ for n in n_nodes:
                 weights = problem.weights
                 payoffs = problem.payoffs
                 sol = problem.solve_greedy(timelimit=5)
-                problem.solution = [sol, sol]
+                problem.solution = (sol, sol)
 
                 # Weights
                 print("Weights")

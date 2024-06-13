@@ -1,20 +1,20 @@
 from time import time
 import itertools
-from typing import List
+from typing import List, Optional
 
-from pydantic import ConfigDict, BaseModel
+from pydantic import BaseModel, validate_call
 import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
 
 from problems.utils import powerset
-from problems.base import IPGResult, early_stopping
+from problems.base import IPGResult, early_stopping, allow_nparray
 
 eps = 0.001
 
 
 class KnapsackPackingGame(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    model_config = allow_nparray
     # Class for storing binary Knapsack Packing Games.
     n: int  # number of players
     m: int  # number of items
@@ -25,8 +25,8 @@ class KnapsackPackingGame(BaseModel):
     weights: np.ndarray  # weights of the items, (n, m)
     payoffs: np.ndarray  # payoffs of the items, (n, m)
     inter_coefs: np.ndarray  # interaction payoff of the items (n, n, m)
-    solution: np.ndarray = None
-    result: IPGResult = None
+    solution: Optional[np.ndarray] = None
+    result: Optional[IPGResult] = None
 
     def __init__(
         self,
@@ -71,7 +71,8 @@ class KnapsackPackingGame(BaseModel):
         print("Interaction coefficients")
         print(self.inter_coefs)
 
-    def solve(self, verbose=False, timelimit: int = None) -> IPGResult:
+    @validate_call
+    def solve(self, verbose=False, timelimit: Optional[int] = None) -> IPGResult:
         """
         Solve the KPG using zero_regrets(). Sets self.solution if this was None.
         Sets self.result too, which records the information of the solution.
@@ -91,14 +92,15 @@ class KnapsackPackingGame(BaseModel):
         self.solution = self.result.X
         return self.result
 
+    @validate_call(config=allow_nparray)
     def solve_player(
         self,
         player: int,
-        current_sol: np.ndarray = None,
-        weights: np.ndarray = None,
-        payoffs: np.ndarray = None,
-        inter_coefs: np.ndarray = None,
-        timelimit: int = None,
+        current_sol: Optional[np.ndarray] = None,
+        weights: Optional[np.ndarray] = None,
+        payoffs: Optional[np.ndarray] = None,
+        inter_coefs: Optional[np.ndarray] = None,
+        timelimit: Optional[int] = None,
     ) -> np.ndarray:
         if current_sol is None:
             if self.solution is None:
@@ -152,6 +154,7 @@ class KnapsackPackingGame(BaseModel):
 
         return result
 
+    @validate_call(config=allow_nparray)
     def solve_greedy(self) -> np.ndarray:
         change = True
 
@@ -172,13 +175,14 @@ class KnapsackPackingGame(BaseModel):
 
         return solution
 
+    @validate_call(config=allow_nparray)
     def obj_value(
         self,
         player: int,
-        solution: np.ndarray = None,
-        player_solution: np.ndarray = None,
-        payoffs: np.ndarray = None,
-        inter_coefs: np.ndarray = None,
+        solution: Optional[np.ndarray] = None,
+        player_solution: Optional[np.ndarray] = None,
+        payoffs: Optional[np.ndarray] = None,
+        inter_coefs: Optional[np.ndarray] = None,
     ) -> int:
         """
         Calculates the objective value for a player based on a given solution.
@@ -222,6 +226,7 @@ class KnapsackPackingGame(BaseModel):
         return value
 
 
+@validate_call
 def generate_random_KPG(
     n=2,
     m=25,
@@ -259,8 +264,9 @@ def generate_random_KPG(
     return kpg
 
 
+@validate_call
 def zero_regrets_kpg(
-    kpg: KnapsackPackingGame, timelimit: int = None, verbose=False
+    kpg: KnapsackPackingGame, timelimit: Optional[int] = None, verbose=False
 ) -> IPGResult:
     """
     Solves kpg using the ZeroRegrets methods of cutting.
