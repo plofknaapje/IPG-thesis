@@ -9,7 +9,7 @@ from numpy.random import Generator
 from problems.knapsack_packing_game import KnapsackPackingGame
 from problems.base import ApproxOptions
 
-eps = 0.5
+eps = 0.001
 
 
 def generate_weight_problems(
@@ -241,16 +241,12 @@ def inverse_weights(
             model.addConstr(problem.solution[j] @ w[j] <= problem.capacity[j])
 
     new_constraint = True
-    current_w = np.zeros_like(w)
 
     while new_constraint:
         model.optimize()
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
-
-        if np.array_equal(current_w, w.X):
-            break
 
         if timelimit is not None and time() - start >= timelimit:
             break

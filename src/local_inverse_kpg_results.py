@@ -26,7 +26,7 @@ approach = Target.WEIGHTS
 if approach is Target.WEIGHTS:
     ranges = [500, 1000]
     if neg_inter:
-        n_items = [50, 100]
+        n_items = [50, 100, 500]
     else:
         n_items = [100, 500, 1000]
 elif approach is Target.PAYOFFS:

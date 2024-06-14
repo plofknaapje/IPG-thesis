@@ -21,14 +21,16 @@ repeats = 5
 
 if approach is Target.WEIGHTS:
     players = [2, 3]
-    items = [10, 20]
-    mults = [0.5, 1, 2, 4, 6]
+    items = [10, 20, 25]
+    mults = [1, 2, 4, 6, 8]
     ranges = [100]
 elif approach is Target.PAYOFFS:
     players = [2, 3]
-    items = [10, 20]
+    items = [10, 20, 25]
     mults = [1, 2, 4, 6, 8]
     ranges = [100]
+
+items = [25]
 
 if approach is Target.WEIGHTS:
     for m in items:
