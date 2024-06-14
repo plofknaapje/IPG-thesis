@@ -16,7 +16,7 @@ columns = ["players", "items", "range", "obs", "runtime", "diff"]
 
 results = []
 
-approach = Target.WEIGHTS
+approach = Target.PAYOFFS
 repeats = 5
 
 if approach is Target.WEIGHTS:
@@ -43,7 +43,7 @@ if approach is Target.WEIGHTS:
                 diffs = [[] for _ in observations]
                 for i in range(repeats):
                     problems = generate_weight_problems(
-                        max(observations), n, m, r, 0.5, approx_options=options, rng=rng
+                        max(observations), n, m, r=r, capacity=0.5, approx_options=options, rng=rng
                     )
                     weights = problems[0].weights
                     for j, o in enumerate(observations):
@@ -71,8 +71,6 @@ if approach is Target.WEIGHTS:
 elif approach is Target.PAYOFFS:
     for phi in [True, False]:
         for m in items:
-            if m != 25:
-                continue
             options = ApproxOptions(
                 allow_phi_ne=phi, timelimit=m, allow_timelimit_reached=False
             )
@@ -91,8 +89,8 @@ elif approach is Target.PAYOFFS:
                             max(observations),
                             n,
                             m,
-                            r,
-                            0.5,
+                            r=r,
+                            capacity=0.5,
                             approx_options=options,
                             rng=rng,
                         )

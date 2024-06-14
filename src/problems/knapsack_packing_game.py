@@ -203,13 +203,14 @@ class KnapsackPackingGame(BaseModel):
 
         if player_solution is not None:
             player_sol = player_solution
-        elif solution is not None:
+        if solution is not None:
             player_sol = solution[player]
         else:
             player_sol = self.solution[player]
 
         if payoffs is None:
             payoffs = self.payoffs
+
         if inter_coefs is None:
             inter_coefs = self.inter_coefs
 

@@ -21,7 +21,7 @@ if neg_inter:
 else:
     players = [2, 3, 4]
 
-approach = Target.PAYOFFS
+approach = Target.WEIGHTS
 
 if approach is Target.WEIGHTS:
     ranges = [500, 1000]

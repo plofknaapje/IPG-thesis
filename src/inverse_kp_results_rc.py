@@ -22,11 +22,11 @@ print(approach)
 
 if approach is Target.WEIGHTS:
     ranges = [100]
-    n_items = [20, 40]
+    n_items = [20, 40, 60]
     mults = [1, 2, 3, 4]
 elif approach is Target.PAYOFFS:
     ranges = [100]
-    n_items = [20, 40]
+    n_items = [20, 40, 60]
     mults = [0.5, 1, 2, 4, 6, 8]
 
 results = []

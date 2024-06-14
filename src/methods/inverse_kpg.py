@@ -9,7 +9,7 @@ from numpy.random import Generator
 from problems.knapsack_packing_game import KnapsackPackingGame
 from problems.base import ApproxOptions
 
-eps = 0.001
+eps = 0.5
 
 
 def generate_weight_problems(
