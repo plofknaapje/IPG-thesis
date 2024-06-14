@@ -211,7 +211,7 @@ class CriticalNodeGame(BaseModel):
             mitigated = params[1]
             overcommit = params[2]
             normal = params[3]
-            Optional[timelimit] = None
+            timelimit = None
 
         model = gp.Model("CNG player")
 

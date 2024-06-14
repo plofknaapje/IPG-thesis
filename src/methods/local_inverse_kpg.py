@@ -43,6 +43,7 @@ def local_inverse_weights(problem: KnapsackPackingGame, timelimit=None) -> np.nd
     )
 
     new_constraint = True
+    current_w = np.zeros_like(w)
 
     while new_constraint:
         model.optimize()
@@ -52,6 +53,9 @@ def local_inverse_weights(problem: KnapsackPackingGame, timelimit=None) -> np.nd
 
         if timelimit is not None and time() - start >= timelimit:
             raise ValueError("Time limit reached!")
+        
+        if np.array_equal(current_w, w.X):
+            break
 
         new_constraint = False
         current_w = w.X
@@ -138,6 +142,8 @@ def local_inverse_payoffs(
     ]
 
     new_constraint = True
+    current_p = np.zeros_like(p)
+    current_i = np.zeros_like(inter)
     solutions = [set() for _ in problem.players]
 
     while new_constraint:
@@ -148,6 +154,9 @@ def local_inverse_payoffs(
 
         if timelimit is not None and time() - start >= timelimit:
             raise ValueError("Time limit reached!")
+        
+        if np.array_equal(current_p, p.X) and np.array_equal(current_i, inter.X):
+            break
 
         new_constraint = False
         current_p = p.X

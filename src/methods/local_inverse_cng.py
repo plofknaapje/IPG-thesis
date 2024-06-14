@@ -51,6 +51,7 @@ def local_inverse_weights(
     )
 
     new_constraint = True
+    current_w = np.zeros_like(w)
 
     while new_constraint:
         model.optimize()
@@ -66,6 +67,9 @@ def local_inverse_weights(
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is initially infeasible")
+
+        if np.zeros_like(current_w, w.X):
+            break
 
         new_constraint = False
         current_w = w.X
@@ -144,6 +148,7 @@ def local_inverse_payoffs(
     )
 
     new_constraint = True
+    current_p = np.zeros_like(p)
 
     solutions = [set(), set()]
 
@@ -172,6 +177,9 @@ def local_inverse_payoffs(
         ):
             print("Timelimit reached")
             raise UserWarning("Timelimit reached")
+
+        if np.array_equal(current_p, p.X):
+            break
 
         new_constraint = False
         current_p = p.X

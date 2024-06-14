@@ -96,7 +96,7 @@ elif approach is Target.PAYOFFS:
 
         df = pd.DataFrame(results, columns=columns)
         df.to_csv(
-            f"./results/kp/inverse_kp-payoffs-{repeats}-{n}-nodes-rc.csv",
+            f"./results/kp/inverse_kp-payoffs-{repeats}-{n}-items-rc.csv",
             float_format="%6.3f",
             index=False,
         )

@@ -17,7 +17,7 @@ repeats = 5
 
 columns = ["n", "r", "o", "runtime", "error"]
 
-approach = Target.WEIGHTS
+approach = Target.PAYOFFS
 print(approach)
 
 if approach is Target.WEIGHTS:
@@ -48,7 +48,7 @@ if approach is Target.WEIGHTS:
                 for j, o in enumerate(observations):
                     start = time()
                     inverse = inverse_weights(
-                        problems[:o], timelimit=o / 2, verbose=True
+                        problems[:o], timelimit=o / 2, verbose=False
                     )
                     end = time() - start
                     runtimes[j].append(end)
@@ -82,11 +82,9 @@ elif approach is Target.PAYOFFS:
                 payoffs = problems[0].payoffs
 
                 for j, o in enumerate(observations):
-                    if j != 0:
-                        continue
                     start = time()
                     inverse = inverse_payoffs_delta(
-                        problems[:o], timelimit=o / 2, verbose=True
+                        problems[:o], timelimit=o / 2, verbose=False
                     )
                     end = time() - start
                     runtimes[j].append(end)
@@ -98,7 +96,7 @@ elif approach is Target.PAYOFFS:
 
         df = pd.DataFrame(results, columns=columns)
         df.to_csv(
-            f"./results/kp/inverse_kp-payoffs-{repeats}-{n}-nodes.csv",
+            f"./results/kp/inverse_kp-payoffs-{repeats}-{n}-items.csv",
             float_format="%6.3f",
             index=False,
         )

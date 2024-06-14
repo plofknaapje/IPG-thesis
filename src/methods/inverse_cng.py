@@ -55,7 +55,7 @@ def generate_weight_problems(
             print(problem.result[0])
             print(problem.result[1])
 
-        if len(problems) != 0 and len(problems) % 10 == 0:
+        if len(problems) != 0 and len(problems) % 10 == 0 and verbose:
             print(f"{len(problems)} problems generated.")
 
     return problems
@@ -181,6 +181,7 @@ def inverse_payoffs(
         )
 
     new_constraint = True
+    current_p = np.zeros_like(p)
 
     solutions = {(i, j): set() for i in range(n_problems) for j in [0, 1]}
 
@@ -189,6 +190,9 @@ def inverse_payoffs(
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
+        
+        if np.array_equal(current_p, p.X):
+            break
 
         new_constraint = False
         current_p = p.X
@@ -258,11 +262,16 @@ def inverse_weights(problems: List[CriticalNodeGame], verbose=True) -> np.ndarra
             model.addConstr(w[i] @ problem.solution[1][i] <= problem.capacity[i])
     new_constraint = True
 
+    current_w = np.zeros_like(w)
+
     while new_constraint:
         model.optimize()
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
+
+        if np.array_equal(current_w, w.X):
+            break
 
         new_constraint = False
         current_w = w.X
@@ -301,7 +310,6 @@ def inverse_params(problems: List[CriticalNodeGame], verbose=True) -> np.ndarray
     model = gp.Model("Inverse CNG (Payoffs)")
 
     delta = model.addMVar((n_problems, 2), name="delta")
-    bin_params = model.addMVar((4, 7), vtype=GRB.BINARY)
     params = model.addMVar((4), lb=0.01, ub=0.99)
     success = params[0]
     mitigated = params[1]
@@ -330,12 +338,12 @@ def inverse_params(problems: List[CriticalNodeGame], verbose=True) -> np.ndarray
             + (1 - mitigated) * defence * attack
         )
 
-    for p in range(4):
-        model.addConstr(
-            params[p] == gp.quicksum(bin_params[p, i] * 0.01 * 2**i for i in range(7))
-        )
+    model.addConstr(success * 1.001 <= mitigated)
+    model.addConstr(mitigated * 1.001 <= unchallanged)
 
     new_constraint = True
+
+    current_params = np.zeros_like(params)
 
     solutions = {(i, j): set() for i in range(n_problems) for j in [0, 1]}
 
@@ -344,6 +352,9 @@ def inverse_params(problems: List[CriticalNodeGame], verbose=True) -> np.ndarray
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
+        
+        if np.array_equal(current_params, params.X):
+            break
 
         current_params = params.X
 
@@ -355,7 +366,7 @@ def inverse_params(problems: List[CriticalNodeGame], verbose=True) -> np.ndarray
         for i, problem in enumerate(problems):
             # Defender
             attack = problem.solution[0][1]
-            new_def_x = problem.solve_player(True, params=current_params)
+            new_def_x = problem.solve_player(True, params=current_params, timelimit=1)
             if tuple(new_def_x) not in solutions[i, 0]:
                 new_def_obj = problem.payoffs @ (
                     (1 - new_def_x) * (1 - attack)
@@ -371,7 +382,7 @@ def inverse_params(problems: List[CriticalNodeGame], verbose=True) -> np.ndarray
 
             # Attacker
             defence = problem.solution[1][0]
-            new_att_x = problem.solve_player(False, params=current_params)
+            new_att_x = problem.solve_player(False, params=current_params, timelimit=1)
             if tuple(new_att_x) not in solutions[i, 1]:
                 new_att_obj = problem.payoffs @ (
                     -normal * (1 - defence) * (1 - new_att_x)

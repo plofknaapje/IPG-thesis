@@ -54,7 +54,6 @@ def generate_weight_problems(
     problems = []
 
     weights = rng.integers(1, r + 1, (n, m))
-    weight_sum = weights.sum(axis=1)
 
     if capacity is None:
         capacity: np.ndarray = rng.uniform(0.2, 0.8, (size, n))
@@ -242,12 +241,16 @@ def inverse_weights(
             model.addConstr(problem.solution[j] @ w[j] <= problem.capacity[j])
 
     new_constraint = True
+    current_w = np.zeros_like(w)
 
     while new_constraint:
         model.optimize()
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
+
+        if np.array_equal(current_w, w.X):
+            break
 
         if timelimit is not None and time() - start >= timelimit:
             break
@@ -322,17 +325,21 @@ def inverse_payoffs(
     }
 
     new_constraint = True
+    current_p = np.zeros_like(p)
 
     solutions = {(i, j): set() for i in range(n_problems) for j in players}
 
     while new_constraint:
         model.optimize()
 
-        if timelimit is not None and time() - start >= timelimit:
-            break
-
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
+        
+        if np.array_equal(current_p, p.X):
+            break
+
+        if timelimit is not None and time() - start >= timelimit:
+            break
 
         new_constraint = False
         current_p = p.X  # for comparison after optimization

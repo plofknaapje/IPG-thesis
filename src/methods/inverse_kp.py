@@ -145,7 +145,7 @@ def inverse_weights(
         model.addConstr(problem.solution @ w <= problem.capacity)
 
     new_constraint = True
-    current_w = np.ones_like(weights)
+    current_w = np.zeros_like(weights)
 
     while new_constraint:
         model.optimize()
@@ -158,6 +158,9 @@ def inverse_weights(
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
+        
+        if np.array_equal(current_w, w.X):
+            break
 
         if timelimit is not None and time() - start >= timelimit:
             break
@@ -218,8 +221,9 @@ def inverse_payoffs_delta(
 
     model.addConstr(p.sum() == payoffs.sum())
 
-    current_p = np.ones_like(payoffs)
     new_constraint = True
+    current_p = np.zeros_like(payoffs)
+
 
     solutions = [set() for _ in problems]
 
@@ -234,6 +238,9 @@ def inverse_payoffs_delta(
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
+        
+        if np.array_equal(current_p, p.X):
+            break
 
         if timelimit is not None and time() - start >= timelimit:
             break
