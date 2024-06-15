@@ -14,7 +14,7 @@ from methods.local_inverse_kpg import (
 rng = np.random.default_rng(42)
 
 repeats = 30
-neg_inter = True
+neg_inter = False
 
 if neg_inter:
     players = [2]
