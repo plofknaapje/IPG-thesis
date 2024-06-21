@@ -19,16 +19,11 @@ results = []
 approach = Target.PAYOFFS
 repeats = 5
 
-if approach is Target.WEIGHTS:
-    players = [2, 3]
-    items = [10, 20, 25]
-    mults = [1, 2, 4, 6, 8]
-    ranges = [100]
-elif approach is Target.PAYOFFS:
-    players = [2, 3]
-    items = [10, 20, 25]
-    mults = [1, 2, 4, 6, 8]
-    ranges = [100]
+players = [2, 3]
+items = [10, 20, 25]
+mults = [1, 2, 4, 6, 8]
+ranges = [100]
+
 
 if approach is Target.WEIGHTS:
     for m in items:

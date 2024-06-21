@@ -21,7 +21,7 @@ caps = [(0.3, 0.03), (0.3, 0.1), (0.5, 0.1)]
 approx_options = ApproxOptions(
     allow_phi_ne=True, timelimit=10, allow_timelimit_reached=False
 )
-approach = Target.PARAMS
+approach = Target.WEIGHTS
 
 for cap in caps:
     if approach is Target.WEIGHTS:
@@ -35,6 +35,9 @@ for cap in caps:
         problems = generate_weight_problems(
             obs, 10, parameters=params, approx_options=approx_options, rng=rng
         )
+        for problem in problems:
+            if problem.result[0].phi != problem.result[1].phi:
+                print("Unequal PNE!")
         original = problems[0].weights
         inverse = inverse_weights(problems)
     elif approach is Target.PAYOFFS:
