@@ -190,7 +190,7 @@ def inverse_payoffs(
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
-        
+
         if np.array_equal(current_p, p.X):
             break
 
@@ -352,7 +352,7 @@ def inverse_params(problems: List[CriticalNodeGame], verbose=True) -> np.ndarray
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
-        
+
         if np.array_equal(current_params, params.X):
             break
 

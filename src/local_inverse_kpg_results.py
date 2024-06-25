@@ -14,25 +14,25 @@ from methods.local_inverse_kpg import (
 rng = np.random.default_rng(42)
 
 repeats = 30
-neg_inter = False
+neg_inter = True
 
 if neg_inter:
     players = [2]
 else:
     players = [2, 3, 4]
 
-approach = Target.WEIGHTS
+approach = Target.PAYOFFS
 
 if approach is Target.WEIGHTS:
     ranges = [500, 1000]
     if neg_inter:
-        n_items = [50, 100, 500]
+        n_items = [50, 100, 200]
     else:
         n_items = [100, 500, 1000]
 elif approach is Target.PAYOFFS:
     ranges = [500, 1000]
     if neg_inter:
-        n_items = [50, 100]
+        n_items = [50, 100, 200]
     else:
         n_items = [100, 500, 1000]
 

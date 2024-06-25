@@ -1,0 +1,44 @@
+---
+title: "Plots"
+output: html_notebook
+---
+
+This notebook generates all the plots for the Inverse Optimization of Integer Programming Games document
+
+
+```{r}
+library(tidyverse)
+```
+
+# Adjustment Inverse Optimization
+
+```{r}
+local_kp <- function(filename, type) {
+    df = read_csv(filename)
+    dodge <- position_dodge(width=0.75)
+
+    ggplot(data = df, mapping = aes(y=factor(items), x=avg, group=factor(range), colour=factor(range))) +
+        geom_point(position = dodge) + 
+        geom_errorbarh(aes(xmin=min, xmax=max), position = dodge) +
+        xlab("Number of items") +
+        ylab("Running time (s)") +
+        labs(title=paste("Knapsack", type, "adjustment running times", sep=" "), 
+             caption="Dots indicate the mean running times and lines indicate minimum and maximum",
+             colour="Range")
+    
+    ggsave(paste("plots/local_kp_", type, "s.pdf", sep=""), width=8, height=5)
+}
+```
+
+
+## Knapsack Payoffs
+```{r}
+local_kp("results/kp/local/local_inverse_kp-payoffs-30.csv", "payoff")
+
+```
+## Knapsack Weights
+```{r}
+local_kp("results/kp/local/local_inverse_kp-payoffs-30.csv", "weight")
+```
+```
+

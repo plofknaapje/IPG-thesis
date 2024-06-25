@@ -27,11 +27,24 @@ for cap in caps:
     if approach is Target.WEIGHTS:
         obs = 200
         if random_cap:
-            params = [CNGParams(success=0.8 * mit, mitigated=mit, unchallenged=1.25 * mit,
-                                normal=norm, rng=rng) for _ in range(obs)]
+            params = [
+                CNGParams(
+                    success=0.8 * mit,
+                    mitigated=mit,
+                    unchallenged=1.25 * mit,
+                    normal=norm,
+                    rng=rng,
+                )
+                for _ in range(obs)
+            ]
         else:
-            params = CNGParams(success=0.8 * mit, mitigated=mit, unchallenged=1.25 * mit,
-                                normal=norm, capacity_perc=cap)
+            params = CNGParams(
+                success=0.8 * mit,
+                mitigated=mit,
+                unchallenged=1.25 * mit,
+                normal=norm,
+                capacity_perc=cap,
+            )
         problems = generate_weight_problems(
             obs, 10, parameters=params, approx_options=approx_options, rng=rng
         )
@@ -43,24 +56,57 @@ for cap in caps:
     elif approach is Target.PAYOFFS:
         obs = 100
         if random_cap:
-            params = [CNGParams(success=0.8 * mit, mitigated=mit, unchallenged=1.25 * mit,
-                                normal=norm, rng=rng) for _ in range(obs)]
+            params = [
+                CNGParams(
+                    success=0.8 * mit,
+                    mitigated=mit,
+                    unchallenged=1.25 * mit,
+                    normal=norm,
+                    rng=rng,
+                )
+                for _ in range(obs)
+            ]
         else:
-            params = CNGParams(success=0.8 * mit, mitigated=mit, unchallenged=1.25 * mit,
-                                normal=norm, capacity_perc=cap)
+            params = CNGParams(
+                success=0.8 * mit,
+                mitigated=mit,
+                unchallenged=1.25 * mit,
+                normal=norm,
+                capacity_perc=cap,
+            )
 
-        problems = generate_payoff_problems(obs, 10, parameters=params, approx_options=approx_options, rng=rng)
+        problems = generate_payoff_problems(
+            obs, 10, parameters=params, approx_options=approx_options, rng=rng
+        )
         original = problems[0].payoffs
         inverse = inverse_payoffs(problems)
 
     elif approach is Target.PARAMS:
         obs = 100
         if random_cap:
-            params = [CNGParams(success=0.8 * mit, mitigated=mit, unchallenged=1.25 * mit,
-                                normal=norm, capacity_perc=None, rng=rng) for _ in range(obs)]
+            params = [
+                CNGParams(
+                    success=0.8 * mit,
+                    mitigated=mit,
+                    unchallenged=1.25 * mit,
+                    normal=norm,
+                    capacity_perc=None,
+                    rng=rng,
+                )
+                for _ in range(obs)
+            ]
         else:
-            params = [CNGParams(success=0.8 * mit, mitigated=mit, unchallenged=1.25 * mit,
-                                normal=norm, capacity_perc=cap, rng=rng) for _ in range(obs)]
+            params = [
+                CNGParams(
+                    success=0.8 * mit,
+                    mitigated=mit,
+                    unchallenged=1.25 * mit,
+                    normal=norm,
+                    capacity_perc=cap,
+                    rng=rng,
+                )
+                for _ in range(obs)
+            ]
         problems = generate_param_problems(
             obs, 10, params, approx_options=approx_options, rng=rng
         )

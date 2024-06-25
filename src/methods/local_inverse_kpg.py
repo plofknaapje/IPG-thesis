@@ -53,7 +53,7 @@ def local_inverse_weights(problem: KnapsackPackingGame, timelimit=None) -> np.nd
 
         if timelimit is not None and time() - start >= timelimit:
             raise ValueError("Time limit reached!")
-        
+
         if np.array_equal(current_w, w.X):
             break
 
@@ -154,7 +154,7 @@ def local_inverse_payoffs(
 
         if timelimit is not None and time() - start >= timelimit:
             raise ValueError("Time limit reached!")
-        
+
         if np.array_equal(current_p, p.X) and np.array_equal(current_i, inter.X):
             break
 

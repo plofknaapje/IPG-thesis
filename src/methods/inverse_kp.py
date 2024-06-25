@@ -158,7 +158,7 @@ def inverse_weights(
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
-        
+
         if np.array_equal(current_w, w.X):
             break
 
@@ -224,7 +224,6 @@ def inverse_payoffs_delta(
     new_constraint = True
     current_p = np.zeros_like(payoffs)
 
-
     solutions = [set() for _ in problems]
 
     while new_constraint:
@@ -238,7 +237,7 @@ def inverse_payoffs_delta(
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
-        
+
         if np.array_equal(current_p, p.X):
             break
 

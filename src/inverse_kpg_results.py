@@ -38,7 +38,13 @@ if approach is Target.WEIGHTS:
                 diffs = [[] for _ in observations]
                 for i in range(repeats):
                     problems = generate_weight_problems(
-                        max(observations), n, m, r=r, capacity=0.5, approx_options=options, rng=rng
+                        max(observations),
+                        n,
+                        m,
+                        r=r,
+                        capacity=0.5,
+                        approx_options=options,
+                        rng=rng,
                     )
                     weights = problems[0].weights
                     for j, o in enumerate(observations):

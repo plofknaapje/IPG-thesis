@@ -330,7 +330,7 @@ def inverse_payoffs(
 
         if model.Status == GRB.INFEASIBLE:
             raise ValueError("Problem is Infeasible!")
-        
+
         if np.array_equal(current_p, p.X):
             break
 
