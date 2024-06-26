@@ -5,40 +5,116 @@ output: html_notebook
 
 This notebook generates all the plots for the Inverse Optimization of Integer Programming Games document
 
-
-```{r}
-library(tidyverse)
-```
-
 # Adjustment Inverse Optimization
 
+## Knapsack Problem
 ```{r}
+require(tidyverse)
 local_kp <- function(filename, type) {
     df = read_csv(filename)
     dodge <- position_dodge(width=0.75)
 
     ggplot(data = df, mapping = aes(y=factor(items), x=avg, group=factor(range), colour=factor(range))) +
-        geom_point(position = dodge) + 
-        geom_errorbarh(aes(xmin=min, xmax=max), position = dodge) +
-        xlab("Number of items") +
-        ylab("Running time (s)") +
-        labs(title=paste("Knapsack", type, "adjustment running times", sep=" "), 
-             caption="Dots indicate the mean running times and lines indicate minimum and maximum",
-             colour="Range")
-    
-    ggsave(paste("plots/local_kp_", type, "s.pdf", sep=""), width=8, height=5)
+        geom_pointrange(aes(xmin=min, xmax=max), position = dodge, size=0.25) +
+        ylab("items") +
+        xlab("running time (seconds)") +
+        labs(caption="Dots indicate the mean running times and lines indicate minimum and maximum.",
+             colour="range")
 }
 ```
 
 
-## Knapsack Payoffs
+### Payoffs
 ```{r}
 local_kp("results/kp/local/local_inverse_kp-payoffs-30.csv", "payoff")
 
 ```
-## Knapsack Weights
+### Weights
 ```{r}
 local_kp("results/kp/local/local_inverse_kp-payoffs-30.csv", "weight")
 ```
+
+## Knapsack Packing Game
+
+```{r}
+require(tidyverse)
+player_labs <- as_labeller(
+     c(`2` = "2 players", `3` = "3 players", `4` = "4 players"))
+local_kpg <- function(filename, type) {
+    df = read_csv(filename)
+    dodge <- position_dodge(width=0.75)
+
+    ggplot(data = df, mapping = aes(y=factor(items), x=avg, group=factor(range), colour=factor(range))) +
+        geom_point(position = dodge) + 
+        geom_pointrange(aes(xmin=min, xmax=max), position = dodge, size=0.2) +
+        ylab("items") +
+        xlab("running time (seconds)") +
+        labs(caption="Dots indicate the mean running times and lines indicate minimum and maximum",
+             colour="range") +
+        facet_wrap(~players, ncol=1, labeller=player_labs)
+}
+```
+
+### Payoff
+```{r}
+filename <- "results/kpg/local/local_inverse_kpg-payoffs-30-4-False.csv"
+type <- "payoff"
+local_kpg(filename, type)
+```
+
+### Weights
+```{r}
+filename <- "results/kpg/local/local_inverse_kpg-weights-30-4-False.csv"
+type <- "weight"
+local_kpg(filename, type)
+```
+
+
+
+# Reconstruction inverse optimization
+
+## Knapsack Problem
+
+```{r}
+measurement_labs = as_labeller(c(`error`="RAC", `runtime`="running time"))
+
+global_kp <- function(type) {
+    str <- paste("inverse_kp-", type, "-5-[0-9]+-items.csv", sep="")
+    df_fixed <- list.files("results/kp", full.names = TRUE, pattern=str, include.dirs = FALSE) %>%
+    map_dfr(read_csv) %>%
+    pivot_longer(c(`runtime`,`error`), names_to="measurement", values_to="value")
+    df_fixed$cap <- "fixed"
+    
+    str <- paste("inverse_kp-", type, "-5-[0-9]+-items-rc.csv", sep="")
+    df_random <- list.files("results/kp", full.names = TRUE, pattern=str, include.dirs = FALSE) %>%
+    map_dfr(read_csv) %>%
+    pivot_longer(c(`runtime`,`error`), names_to="measurement", values_to="value")
+    df_random$cap <- "random"
+    
+    df <- bind_rows(df_fixed, df_random)
+ggplot(data=df, aes(x=o, y=value, colour=factor(n), linetype=cap)) +
+    geom_line() +
+    facet_grid(measurement ~ ., scales="free_y", labeller=measurement_labs) +
+    labs(x="observations", y="", 
+         colour="items", linetype="capacity") +
+    scale_x_log10()
+    
+}
+```
+
+### Payoffs
+```{r}
+type <- "payoffs"
+
+global_kp(type)
+```
+
+### Weights
+
+
+```{r}
+type <- "weights"
+
+global_kp(type)
 ```
 
