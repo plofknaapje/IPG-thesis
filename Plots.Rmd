@@ -11,14 +11,15 @@ This notebook generates all the plots for the Inverse Optimization of Integer Pr
 ```{r}
 require(tidyverse)
 local_kp <- function(filename, type) {
-    df = read_csv(filename)
+    df = read_csv(filename, show_col_types = FALSE)
     dodge <- position_dodge(width=0.75)
 
     ggplot(data = df, mapping = aes(y=factor(items), x=avg, group=factor(range), colour=factor(range))) +
+        geom_point(position = dodge) + 
         geom_pointrange(aes(xmin=min, xmax=max), position = dodge, size=0.25) +
-        ylab("items") +
-        xlab("running time (seconds)") +
-        labs(caption="Dots indicate the mean running times and lines indicate minimum and maximum.",
+        labs(caption="Dots indicate the mean running times and lines indicate minimum and maximum running times.",
+             y="items",
+             x="running time (seconds)",
              colour="range")
 }
 ```
@@ -26,30 +27,31 @@ local_kp <- function(filename, type) {
 
 ### Payoffs
 ```{r}
-local_kp("results/kp/local/local_inverse_kp-payoffs-30.csv", "payoff")
-
+filename <- "results/kp/local/local_inverse_kp-payoffs-30.csv"
+type <- "payoff"
+local_kp(filename, type)
 ```
 ### Weights
 ```{r}
-local_kp("results/kp/local/local_inverse_kp-payoffs-30.csv", "weight")
+filename <- "results/kp/local/local_inverse_kp-weights-30.csv"
+type <- "weight"
+local_kp(filename, type)
 ```
 
 ## Knapsack Packing Game
-
 ```{r}
 require(tidyverse)
 player_labs <- as_labeller(
      c(`2` = "2 players", `3` = "3 players", `4` = "4 players"))
 local_kpg <- function(filename, type) {
-    df = read_csv(filename)
+    df = read_csv(filename, show_col_types = FALSE)
     dodge <- position_dodge(width=0.75)
 
     ggplot(data = df, mapping = aes(y=factor(items), x=avg, group=factor(range), colour=factor(range))) +
-        geom_point(position = dodge) + 
-        geom_pointrange(aes(xmin=min, xmax=max), position = dodge, size=0.2) +
-        ylab("items") +
-        xlab("running time (seconds)") +
-        labs(caption="Dots indicate the mean running times and lines indicate minimum and maximum",
+        geom_pointrange(aes(xmin=min, xmax=max), position = dodge, size=0.25) +
+        labs(caption="Dots indicate the mean running times and lines indicate minimum and maximum running times.",
+             x="running time (seconds)",
+             y="items",
              colour="range") +
         facet_wrap(~players, ncol=1, labeller=player_labs)
 }
@@ -68,7 +70,82 @@ filename <- "results/kpg/local/local_inverse_kpg-weights-30-4-False.csv"
 type <- "weight"
 local_kpg(filename, type)
 ```
+## Critical Node Game
+```{r}
+require(tidyverse)
 
+cng_local_phi <- function(type) {
+  measurement_labs = as_labeller(c(`a_runtime`="mean runtime", `diff`="mean RAC", `phi`="mean phi change"))
+
+  str <- paste("local_inverse_cng-", type, "-10-[0-9]+-nodes.csv", sep="")
+  df <- list.files("results/cng/local", full.names = TRUE, pattern=str, include.dirs = FALSE) %>%
+    map_dfr(read_csv, show_col_types = FALSE) %>%
+    rename(a_runtime=runtime) %>%
+    pivot_longer(c(`a_runtime`, `diff`, `phi`), values_to = "value", names_to = "type")
+
+  
+  head(df)
+  
+  
+  ggplot(data=df, aes(x=nodes, y=value, colour=factor(norm), linetype=factor(mit))) +
+    geom_line(alpha=0.75) +
+    facet_grid(type ~ ., scales="free", labeller=measurement_labs) +
+    labs(x="nodes", y="", linetype="eta", colour="gamma") 
+}
+
+cng_local_greedy <- function(type) {
+  
+  if (type == "weights") {
+    breaks <- c(50, 100, 150, 200)
+  } else if (type == "payoffs") {
+    breaks <- c(50, 70, 100)
+  }
+  
+  measurement_labs = as_labeller(c(`a_runtime`="mean runtime", `diff`="mean RAC", `pne`="total PNE", `inf`="inf"))
+
+  str <- paste("local_inverse_cng-", type, "-20-[0-9]+-nodes-greedy.csv", sep="")
+  df <- list.files("results/cng/local", full.names = TRUE, pattern=str, include.dirs = FALSE) %>%
+    map_dfr(read_csv, show_col_types = FALSE) %>%
+    rename(a_runtime=runtime) %>%
+    pivot_longer(c(`a_runtime`, `diff`, `inf`), values_to = "value", names_to = "type") 
+  
+  head(df)
+  
+  ggplot(data=df, aes(x=nodes, y=value, colour=factor(norm), linetype=factor(mit), group=interaction(norm, mit))) +
+    geom_line() +
+    facet_grid(type ~ ., scales="free", labeller=measurement_labs) +
+    labs(x="nodes", y="", linetype="eta", colour="gamma") +
+    scale_x_continuous(breaks=breaks)
+}
+
+```
+### Payoffs
+
+```{r}
+type <- "payoffs"
+
+cng_local_greedy(type)
+```
+
+```{r}
+type <- "payoffs"
+
+cng_local_phi(type)
+```
+
+
+### Weights
+```{r}
+type <- "weights"
+
+cng_local_phi(type)
+```
+
+```{r}
+type <- "weights"
+
+cng_local_greedy(type)
+```
 
 
 # Reconstruction inverse optimization
@@ -76,28 +153,34 @@ local_kpg(filename, type)
 ## Knapsack Problem
 
 ```{r}
-measurement_labs = as_labeller(c(`error`="RAC", `runtime`="running time"))
+require(tidyverse)
 
-global_kp <- function(type) {
+global_kp <- function(type, labels=waiver(), breaks=waiver()) {
+    measurement_labs = as_labeller(c(`error`="mean RAC", `a_runtime`="mean runtime"))
     str <- paste("inverse_kp-", type, "-5-[0-9]+-items.csv", sep="")
     df_fixed <- list.files("results/kp", full.names = TRUE, pattern=str, include.dirs = FALSE) %>%
-    map_dfr(read_csv) %>%
-    pivot_longer(c(`runtime`,`error`), names_to="measurement", values_to="value")
+      map_dfr(read_csv, show_col_types = FALSE) %>%
+      rename(a_runtime = runtime) %>%
+      pivot_longer(c(`a_runtime`,`error`), names_to="measurement", values_to="value")
     df_fixed$cap <- "fixed"
     
     str <- paste("inverse_kp-", type, "-5-[0-9]+-items-rc.csv", sep="")
     df_random <- list.files("results/kp", full.names = TRUE, pattern=str, include.dirs = FALSE) %>%
-    map_dfr(read_csv) %>%
-    pivot_longer(c(`runtime`,`error`), names_to="measurement", values_to="value")
+      map_dfr(read_csv, show_col_types = FALSE) %>%
+      rename(a_runtime = runtime) %>%
+      pivot_longer(c(`a_runtime`,`error`), names_to="measurement", values_to="value")
     df_random$cap <- "random"
     
-    df <- bind_rows(df_fixed, df_random)
-ggplot(data=df, aes(x=o, y=value, colour=factor(n), linetype=cap)) +
-    geom_line() +
-    facet_grid(measurement ~ ., scales="free_y", labeller=measurement_labs) +
-    labs(x="observations", y="", 
-         colour="items", linetype="capacity") +
-    scale_x_log10()
+    df <- bind_rows(df_fixed, df_random) %>%
+      mutate(std_o = o / n)
+      
+    
+    ggplot(data=df, aes(x=std_o, y=value, colour=factor(n), linetype=cap)) +
+      geom_line() +
+      facet_grid(measurement ~ ., scales="free", labeller=measurement_labs) +
+      labs(x="observations", y="", 
+           colour="items", linetype="capacity") +
+      scale_x_continuous(labels=labels, breaks=breaks)
     
 }
 ```
@@ -105,8 +188,10 @@ ggplot(data=df, aes(x=o, y=value, colour=factor(n), linetype=cap)) +
 ### Payoffs
 ```{r}
 type <- "payoffs"
+breaks <- c(0.5, 2, 4, 6, 8)
+labels <- c("items/2", "2 * items", "4 * items", "6 * items", "8 * items")
 
-global_kp(type)
+global_kp(type, labels, breaks)
 ```
 
 ### Weights
@@ -114,7 +199,81 @@ global_kp(type)
 
 ```{r}
 type <- "weights"
+breaks <- c(1, 2, 3, 4)
+labels <- c("items", "2 * items", "3 * items", "4 * items")
 
-global_kp(type)
+global_kp(type, labels, breaks)
+```
+
+## Knapsack Packing Game
+
+```{r}
+require(tidyverse)
+
+global_kpg <- function(df) {
+  measurement_labs = as_labeller(c(`diff`="mean RAC", `a_runtime`="mean runtime"))
+
+  breaks <- c(1, 2, 4, 6, 8)
+  labels <- c("items", "2 * items", "4 * items", "6 * items", "8 * items")
+  
+  df <- df %>%
+  rename(a_runtime = runtime) %>%
+  pivot_longer(c(`a_runtime`, `diff`), names_to = "measurement", values_to = "value") %>%
+  mutate(s_obs = obs / items)
+
+  ggplot(df, aes(x=s_obs, y=value, colour=factor(items), linetype = factor(players))) +
+    geom_line() +
+    facet_grid(measurement ~ ., scales = "free_y", labeller=measurement_labs) +
+    scale_x_continuous(labels = labels, breaks = breaks) +
+    labs(x="observations", linetype="players", colour="items", y="")
+  
+}
+```
+
+### Payoffs
+```{r}
+type <- "payoffs"
+str <- paste("inverse_kpg-", type, "-5-[0-9]+-items-False.csv", sep="")
+df_false <- list.files("results/kpg", full.names = TRUE, pattern=str, include.dirs = FALSE) %>%
+  map_dfr(read_csv, show_col_types = FALSE)
+
+global_kpg(df_false)
+```
+
+```{r}
+type <- "payoffs"
+str <- paste("inverse_kpg-", type, "-5-[0-9]+-items-True.csv", sep="")
+df_true <- list.files("results/kpg", full.names = TRUE, pattern=str, include.dirs = FALSE) %>%
+  map_dfr(read_csv, show_col_types = FALSE)
+global_kpg(df_true)
+```
+
+
+```{r}
+type <- "payoffs"
+str <- paste("inverse_kpg-", type, "-5-[0-9]+-items-rc.csv", sep="")
+df_rc <- list.files("results/kpg", full.names = TRUE, pattern=str, include.dirs = FALSE) %>%
+  map_dfr(read_csv, show_col_types = FALSE)
+
+global_kpg(df_rc)
+```
+
+### Weights
+```{r}
+type <- "weights"
+str <- paste("inverse_kpg-", type, "-5-[0-9]+-items.csv", sep="")
+df_false <- list.files("results/kpg", full.names = TRUE, pattern=str, include.dirs = FALSE) %>%
+  map_dfr(read_csv, show_col_types = FALSE)
+
+global_kpg(df_false)
+```
+
+```{r}
+type <- "weights"
+str <- paste("inverse_kpg-", type, "-5-[0-9]+-items-rc.csv", sep="")
+df_rc <- list.files("results/kpg", full.names = TRUE, pattern=str, include.dirs = FALSE) %>%
+  map_dfr(read_csv, show_col_types = FALSE)
+
+global_kpg(df_rc)
 ```
 
